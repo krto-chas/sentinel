@@ -14,3 +14,5 @@
 - [ ] Set up monitoring (Prometheus/Grafana) and logging
 - [ ] Write incident runbook for upload API unavailable
 - [ ] Fill in shared responsibility model and cost notes
+- [ ] Ändra Mongo port från 27017 till 28017 då 27017 är blockerad av HyperV
+
