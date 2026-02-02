@@ -135,7 +135,20 @@
         }
       });
 
-      dropzone.addEventListener("click", () => input.click());
+      // Avoid double file-picker dialogs on browsers that already trigger via <label for>.
+      dropzone.addEventListener("click", (event) => {
+        const target = event.target;
+        const isLabelOrInput =
+          target instanceof HTMLElement &&
+          (target.tagName === "LABEL" || target.tagName === "INPUT");
+        if (isLabelOrInput) return;
+        input.click();
+      });
+
+      // Allow selecting the same file again after a previous upload.
+      input.addEventListener("click", () => {
+        input.value = "";
+      });
       input.addEventListener("change", () => {
         if (input.files.length) {
           setStatus(`Selected ${input.files[0].name}`);
