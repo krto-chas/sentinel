@@ -17,3 +17,9 @@ In scope:
 
 Out of scope:
 - Third-party services and infrastructure outside this repository
+
+## CI Security Checks
+
+- Container image scanning with Trivy (fail on HIGH/CRITICAL)
+- SBOM generation with Syft (SPDX JSON artifact)
+- Base image hardened (Alpine)

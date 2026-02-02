@@ -38,7 +38,7 @@
             enforce policy, and ship with confidence.
           </p>
           <div class="cta">
-            <a class="button" href="/docs">API Docs</a>
+            <a class="button" href="#project-docs">Uploaded Files</a>
             <a class="button" href="#upload">Test Upload</a>
           </div>
         </div>
@@ -64,6 +64,25 @@
         </div>
         <button class="button" id="upload-btn" type="button">Upload now</button>
         <div class="status" id="status">Waiting for input…</div>
+      </section>
+
+      <section id="project-docs" class="panel">
+        <h2>Uploaded Files</h2>
+        <p>Latest uploads stored in MongoDB.</p>
+        <div class="list-header">
+          <span>Filename</span>
+          <span>Type</span>
+          <span>Status</span>
+        </div>
+        <div class="list" id="uploads-list">
+          <div class="list-item">Loading...</div>
+        </div>
+        <p class="meta">
+          Developer API docs: <a href="/docs">/docs</a>
+        </p>
+        <p class="meta">
+          Project docs: README.md, PLAN.md, SECURITY.md, docs/*, sre/*, runbooks/*
+        </p>
       </section>
 
       <section class="cards">
@@ -123,6 +142,35 @@
         }
       });
 
+      async function loadUploads() {
+        try {
+          const response = await fetch("/uploads");
+          if (!response.ok) {
+            throw new Error("Database unavailable");
+          }
+          const data = await response.json();
+          const list = document.getElementById("uploads-list");
+          list.innerHTML = "";
+          if (!data.items.length) {
+            list.innerHTML = '<div class="list-item">No uploads yet</div>';
+            return;
+          }
+          data.items.forEach((item) => {
+            const row = document.createElement("div");
+            row.className = "list-item";
+            row.innerHTML = `
+              <span>${item.filename}</span>
+              <span>${item.content_type}</span>
+              <span>${item.status}</span>
+            `;
+            list.appendChild(row);
+          });
+        } catch (error) {
+          const list = document.getElementById("uploads-list");
+          list.innerHTML = '<div class="list-item">DB unavailable</div>';
+        }
+      }
+
       uploadBtn.addEventListener("click", async () => {
         if (!input.files.length) {
           setStatus("Choose a file first.", "warn");
@@ -143,10 +191,13 @@
             throw new Error(data.detail || "Upload failed");
           }
           setStatus(`Accepted: ${data.filename} (${data.content_type})`);
+          await loadUploads();
         } catch (error) {
           setStatus(error.message, "error");
         }
       });
+
+      loadUploads();
     </script>
   </body>
 </html>

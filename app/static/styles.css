@@ -192,6 +192,68 @@ main {
   color: var(--muted);
 }
 
+.panel ul {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.panel ul li {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(54, 255, 122, 0.2);
+  background: rgba(9, 16, 12, 0.7);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.9rem;
+}
+
+.list-header {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(54, 255, 122, 0.2);
+  background: rgba(9, 16, 12, 0.9);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.list-item {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(54, 255, 122, 0.2);
+  background: rgba(9, 16, 12, 0.7);
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.9rem;
+}
+
+.list-item span:last-child {
+  color: var(--neon);
+}
+
+a {
+  color: var(--neon);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 .status {
   padding: 12px 16px;
   border-radius: 12px;

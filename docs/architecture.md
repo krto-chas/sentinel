@@ -4,6 +4,8 @@
 
 - FastAPI service with /health and /upload
 - Static UI served from / (app/static)
+- Container image based on Alpine for reduced OS CVEs
+- MongoDB planned for upload metadata storage
 - Docker image built in CI
 - GitHub Actions CI: test and build
 - Kubernetes deployment (planned)

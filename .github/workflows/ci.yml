@@ -34,4 +34,25 @@ jobs:
 
       - name: Build Docker image (no push)
         run: |
-          docker build -f docker/Dockerfile -t sentinel-upload-api:ci .
+          docker build --pull --no-cache -f docker/Dockerfile -t sentinel-upload-api:ci .
+
+      - name: Trivy scan (HIGH/CRITICAL)
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest \
+            image --exit-code 1 --severity HIGH,CRITICAL sentinel-upload-api:ci
+
+      - name: Generate SBOM (Syft)
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}:/work \
+            anchore/syft:latest \
+            packages sentinel-upload-api:ci -o spdx-json=/work/sbom.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: sbom.spdx.json
