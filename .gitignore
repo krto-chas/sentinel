@@ -1,6 +1,7 @@
 .git
 .env
 .env.local
+.claude/
 
 __pycache__/
 *.pyc
@@ -13,9 +14,16 @@ env/
 
 .pytest_cache/
 .mypy_cache/
+ToDo-intern.md
 
 dist/
 build/
 
 *.log
 .DS_Store
+
+# Local secrets and credential dumps
+Credentials/
+*.firebase-adminsdk-*.json
+*service-account*.json
+k8s/base/secret.yaml

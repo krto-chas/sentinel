@@ -14,13 +14,12 @@ RUN addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 
-# Installera dependencies först för bättre cache
+# Installera enbart produktionsberoenden (test-deps finns i requirements-dev.txt)
 COPY app/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Kopiera appkod + tester (för att kunna köra containern lokalt med samma innehåll)
+# Kopiera enbart appkod (tester behövs inte i produktionsimage)
 COPY app/ /app/app/
-COPY tests/ /app/tests/
 
 # Byt till non-root
 USER app

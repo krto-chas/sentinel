@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-app-config
+  namespace: sentinel
+  labels:
+    app.kubernetes.io/name: sentinel-upload-api
+    app.kubernetes.io/part-of: sentinel-platform
+data:
+  SCANNER_MODE: "clamav"
+  CLAMAV_HOST: "clamav"
+  CLAMAV_PORT: "3310"
+  CLAMAV_TIMEOUT_SECONDS: "5"
+  UPLOAD_RATE_LIMIT_PER_MINUTE: "10"
+  UPLOAD_RATE_LIMIT_WINDOW_SECONDS: "60"
+  AUTH_MODE: "firebase"

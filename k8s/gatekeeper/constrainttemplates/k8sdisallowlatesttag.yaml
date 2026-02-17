@@ -1,0 +1,35 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowlatesttag
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowLatestTag
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowlatesttag
+
+        get_containers(obj) = containers {
+          containers := obj.spec.containers
+        }
+
+        get_containers(obj) = containers {
+          containers := obj.spec.template.spec.containers
+        }
+
+        has_bad_tag(image) {
+          not contains(image, ":")
+        }
+
+        has_bad_tag(image) {
+          endswith(lower(image), ":latest")
+        }
+
+        violation[{"msg": msg}] {
+          c := get_containers(input.review.object)[_]
+          has_bad_tag(c.image)
+          msg := sprintf("container %q uses disallowed image tag in %q", [c.name, c.image])
+        }

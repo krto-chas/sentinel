@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-upload-api
+  namespace: sentinel
+  labels:
+    app.kubernetes.io/name: sentinel-upload-api
+    app.kubernetes.io/part-of: sentinel-platform
+spec:
+  selector:
+    app.kubernetes.io/name: sentinel-upload-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
