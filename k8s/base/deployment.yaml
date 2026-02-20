@@ -19,9 +19,12 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: api
-          image: sidesteperror/sentinel-upload-api:v1.0.0
+          image: jonitsx/sentinel-upload-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

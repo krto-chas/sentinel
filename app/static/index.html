@@ -10,6 +10,12 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -31,60 +37,59 @@
 
     <main>
       <section class="hero">
-        <div>
+        <div class="hero-copy panel">
           <h1>Secure Uploads, Zero Guesswork</h1>
           <p>
             A hardened file intake pipeline built for DevSecOps. Validate types,
             enforce policy, and ship with confidence.
           </p>
-          <div class="cta">
-            <a class="button" href="#project-docs">Uploaded Files</a>
-            <a class="button" href="#upload">Test Upload</a>
-            <a
-              class="button"
-              href="https://github.com/Sidestep-Error/sentinel-upload-api/issues/new/choose"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Report Bug</a
-            >
+          <div class="hero-map-wrap">
+            <div class="hero-map-head">
+              <h2>Incident Pulse (Visualized)</h2>
+              <small>Animated distribution based on current KEV items.</small>
+            </div>
+            <div id="threat-map" class="threat-map" aria-label="Threat activity map"></div>
           </div>
         </div>
-        <div class="panel">
-          <img
-            class="logo-hero"
-            src="/static/assets/sidestep-logo.png"
-            alt="Sidestep Error mark"
-          />
+        <div class="panel map-panel">
+          <h2>Cyber Threat Feed (CISA KEV)</h2>
+          <div class="scan-grid" id="threat-feed-list">
+            <div class="scan-row"><span>Status</span><strong>Loading...</strong></div>
+          </div>
+          <p id="threat-feed-status" class="meta">Fetching latest known exploited vulnerabilities...</p>
         </div>
       </section>
 
-      <section id="auth" class="panel upload">
-        <h2>Auth Console</h2>
-        <div class="auth-grid">
-          <input id="auth-email" type="email" placeholder="Email" />
-          <input id="auth-password" type="password" placeholder="Password" />
+      <section id="upload" class="upload-layout">
+        <div class="panel upload">
+          <h2>Upload Console</h2>
+          <div class="dropzone" id="dropzone">
+            <p>Drop a file here or click to choose</p>
+            <label for="file-input">Choose file</label>
+            <input id="file-input" type="file" />
+          </div>
+          <div class="meta">
+            <div>Allowed types: PDF, PNG, JPG, TXT, MD, CSV, DOC(X), XLS(X), PPT(X), ODT, ODS, ODP</div>
+            <div>Endpoint: <code>/upload</code></div>
+          </div>
+          <button class="button" id="upload-btn" type="button">Upload now</button>
+          <div class="status" id="status">Waiting for input…</div>
         </div>
-        <div class="cta">
-          <button class="button" id="register-btn" type="button">Create account</button>
-          <button class="button" id="login-btn" type="button">Login</button>
-          <button class="button" id="logout-btn" type="button">Logout</button>
+        <div class="panel upload">
+          <h2>Virus Scanning</h2>
+          <div class="scan-grid">
+            <div class="scan-row"><span>File</span><strong id="scan-file">-</strong></div>
+            <div class="scan-row"><span>Result</span><strong id="scan-status">No scan yet</strong></div>
+            <div class="scan-row"><span>Decision</span><strong id="scan-decision">-</strong></div>
+            <div class="scan-row"><span>Risk score</span><strong id="scan-risk">-</strong></div>
+            <div class="scan-row"><span>Engine</span><strong id="scan-engine">-</strong></div>
+            <div class="scan-row"><span>Detail</span><strong id="scan-detail">-</strong></div>
+            <div class="scan-row"><span>Deduplicated</span><strong id="scan-dedup">-</strong></div>
+          </div>
+          <div class="meta">
+            <div>Result updates after each upload.</div>
+          </div>
         </div>
-        <div class="status" id="auth-status">Not authenticated</div>
-      </section>
-
-      <section id="upload" class="panel upload">
-        <h2>Upload Console</h2>
-        <div class="dropzone" id="dropzone">
-          <p>Drop a file here or click to choose</p>
-          <label for="file-input">Choose file</label>
-          <input id="file-input" type="file" />
-        </div>
-        <div class="meta">
-          <div>Allowed types: PDF, PNG, JPG, TXT, MD, CSV, DOC(X), XLS(X), PPT(X), ODT, ODS, ODP</div>
-          <div>Endpoint: <code>/upload</code></div>
-        </div>
-        <button class="button" id="upload-btn" type="button">Upload now</button>
-        <div class="status" id="status">Waiting for input…</div>
       </section>
 
       <section id="project-docs" class="panel">
@@ -98,26 +103,32 @@
         <div class="list" id="uploads-list">
           <div class="list-item">Loading...</div>
         </div>
-        <p class="meta">
-          Developer API docs: <a href="/docs">/docs</a>
-        </p>
-        <p class="meta">
-          Project docs: README.md, PLAN.md, SECURITY.md, docs/*, sre/*, runbooks/*
-        </p>
+        <div id="dev-docs" class="dev-only">
+          <p class="meta">
+            Developer API docs: <a href="/docs">/docs</a>
+          </p>
+          <p class="meta">
+            Project docs: README.md, PLAN.md, SECURITY.md, docs/*, sre/*, runbooks/*
+          </p>
+        </div>
       </section>
 
       <section class="cards">
         <div class="card">
-          <h3>Policy Guarded</h3>
-          <p>Trivy, SBOM, and gatekeeper checks enforce clean builds.</p>
+          <h3>Uploads (24h)</h3>
+          <p id="metric-uploads-24h">-</p>
         </div>
         <div class="card">
-          <h3>Runtime Ready</h3>
-          <p>Falco + runbooks for instant incident response.</p>
+          <h3>Rejected (24h)</h3>
+          <p id="metric-rejected-24h">-</p>
         </div>
         <div class="card">
-          <h3>Observable</h3>
-          <p>SLIs/SLOs track success rate and latency.</p>
+          <h3>Rejection Rate (7d)</h3>
+          <p id="metric-reject-rate-7d">-</p>
+        </div>
+        <div class="card">
+          <h3>Average Risk (7d)</h3>
+          <p id="metric-risk-7d">-</p>
         </div>
       </section>
 
@@ -126,120 +137,193 @@
       </footer>
     </main>
 
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script>
+      const threatFeedStatusEl = document.getElementById("threat-feed-status");
+      const threatFeedListEl = document.getElementById("threat-feed-list");
+      const threatMapEl = document.getElementById("threat-map");
+      let threatMap = null;
+      let threatMapLayer = null;
+
       const dropzone = document.getElementById("dropzone");
       const input = document.getElementById("file-input");
       const uploadBtn = document.getElementById("upload-btn");
       const statusEl = document.getElementById("status");
-      const emailInput = document.getElementById("auth-email");
-      const passwordInput = document.getElementById("auth-password");
-      const registerBtn = document.getElementById("register-btn");
-      const loginBtn = document.getElementById("login-btn");
-      const logoutBtn = document.getElementById("logout-btn");
-      const authStatusEl = document.getElementById("auth-status");
+      const scanFileEl = document.getElementById("scan-file");
+      const scanStatusEl = document.getElementById("scan-status");
+      const scanDecisionEl = document.getElementById("scan-decision");
+      const scanRiskEl = document.getElementById("scan-risk");
+      const scanEngineEl = document.getElementById("scan-engine");
+      const scanDetailEl = document.getElementById("scan-detail");
+      const scanDedupEl = document.getElementById("scan-dedup");
+      const devDocsEl = document.getElementById("dev-docs");
+      const metricUploads24hEl = document.getElementById("metric-uploads-24h");
+      const metricRejected24hEl = document.getElementById("metric-rejected-24h");
+      const metricRejectRate7dEl = document.getElementById("metric-reject-rate-7d");
+      const metricRisk7dEl = document.getElementById("metric-risk-7d");
 
-      let firebaseIdToken = localStorage.getItem("firebaseIdToken") || "";
-      let firebaseWebApiKey = "";
-      let authMode = "off";
-
+      const isDevHost =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1" ||
+        window.location.hostname === "[::1]";
+      if (isDevHost && devDocsEl) {
+        devDocsEl.classList.add("is-visible");
+      }
       function setStatus(message, type) {
         statusEl.textContent = message;
         statusEl.classList.remove("error", "warn");
         if (type) statusEl.classList.add(type);
       }
 
-      function setAuthStatus(message, type) {
-        authStatusEl.textContent = message;
-        authStatusEl.classList.remove("error", "warn");
-        if (type) authStatusEl.classList.add(type);
+      function setScanResult(data) {
+        scanFileEl.textContent = data.filename || "-";
+        scanStatusEl.textContent = data.scan_status || "unknown";
+        scanDecisionEl.textContent = data.decision || "-";
+        scanRiskEl.textContent =
+          typeof data.risk_score === "number" ? `${data.risk_score}/100` : "-";
+        scanEngineEl.textContent = data.scan_engine || "-";
+        scanDetailEl.textContent = data.scan_detail || "-";
+        scanDedupEl.textContent = data.deduplicated ? "Yes" : "No";
+
+        scanStatusEl.classList.remove("status-clean", "status-malicious", "status-error");
+        scanDecisionEl.classList.remove("status-clean", "status-malicious", "status-review");
+
+        if (data.scan_status === "clean") {
+          scanStatusEl.classList.add("status-clean");
+        } else if (data.scan_status === "malicious") {
+          scanStatusEl.classList.add("status-malicious");
+        } else {
+          scanStatusEl.classList.add("status-error");
+        }
+
+        if (data.decision === "accepted") {
+          scanDecisionEl.classList.add("status-clean");
+        } else if (data.decision === "rejected") {
+          scanDecisionEl.classList.add("status-malicious");
+        } else if (data.decision === "review") {
+          scanDecisionEl.classList.add("status-review");
+        }
       }
 
-      function requestHeaders() {
-        const headers = {};
-        if (firebaseIdToken) {
-          headers.Authorization = `Bearer ${firebaseIdToken}`;
-        }
-        return headers;
+      function setMetrics(data) {
+        if (!data) return;
+        const last24h = data.last_24h || {};
+        const last7d = data.last_7d || {};
+        metricUploads24hEl.textContent = `${last24h.total_uploads ?? 0}`;
+        metricRejected24hEl.textContent = `${last24h.rejected ?? 0}`;
+        metricRejectRate7dEl.textContent = `${last7d.rejection_rate_percent ?? 0}%`;
+        metricRisk7dEl.textContent = `${last7d.avg_risk_score ?? 0}/100`;
       }
 
-      async function firebaseAuthRequest(endpoint, body) {
-        if (authMode !== "firebase") {
-          throw new Error("Auth mode is not firebase");
-        }
-        if (!firebaseWebApiKey) {
-          throw new Error("Missing Firebase Web API key in server config");
-        }
-
-        const response = await fetch(
-          `https://identitytoolkit.googleapis.com/v1/${endpoint}?key=${firebaseWebApiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }
-        );
-        const data = await response.json();
-        if (!response.ok) {
-          const firebaseError = data?.error?.message || "Firebase auth failed";
-          throw new Error(firebaseError);
-        }
-        return data;
+      function detailRow(label, value, valueClass) {
+        const row = document.createElement("div");
+        row.className = "scan-row";
+        const labelEl = document.createElement("span");
+        labelEl.textContent = label;
+        const valueEl = document.createElement("strong");
+        valueEl.textContent = value;
+        if (valueClass) valueEl.classList.add(valueClass);
+        row.appendChild(labelEl);
+        row.appendChild(valueEl);
+        return row;
       }
 
-      registerBtn.addEventListener("click", async () => {
-        try {
-          if (authMode !== "firebase") {
-            throw new Error("Auth is disabled (AUTH_MODE=off)");
-          }
-          const email = emailInput.value.trim();
-          const password = passwordInput.value;
-          if (!email || !password) {
-            throw new Error("Email and password required");
-          }
-          const data = await firebaseAuthRequest("accounts:signUp", {
-            email,
-            password,
-            returnSecureToken: true,
+      function renderThreatFeed(payload) {
+        if (!threatFeedListEl) return;
+        const latest = payload.latest || [];
+        threatFeedListEl.innerHTML = "";
+
+        const summaryRows = [
+          ["Source", payload.source || "CISA KEV"],
+          ["Total KEV", String(payload.total_known_exploited_cves ?? 0)],
+          ["Added 30d", String(payload.added_last_30_days ?? 0)],
+        ];
+        summaryRows.forEach(([label, value]) => {
+          const row = document.createElement("div");
+          row.className = "scan-row";
+          row.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+          threatFeedListEl.appendChild(row);
+        });
+
+        latest.slice(0, 5).forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "scan-row";
+          row.innerHTML = `<span>${item.cve || "CVE"}</span><strong>${item.vendor || ""} ${item.product || ""} (${item.date_added || ""})</strong>`;
+          threatFeedListEl.appendChild(row);
+        });
+
+        threatFeedStatusEl.textContent = `Updated ${payload.fetched_at || "recently"} via ${payload.source || "CISA KEV"}.`;
+        if (payload.warning) {
+          threatFeedStatusEl.textContent = payload.warning;
+        }
+      }
+
+      function initThreatMap() {
+        if (!threatMapEl || typeof L === "undefined") return;
+        threatMap = L.map("threat-map", {
+          zoomControl: false,
+          attributionControl: true,
+          minZoom: 4,
+          maxZoom: 8,
+        }).setView([62.1, 16.2], 5);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+          maxZoom: 8,
+          subdomains: "abcd",
+          attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+        }).addTo(threatMap);
+        threatMapLayer = L.layerGroup().addTo(threatMap);
+      }
+
+      function hashString(value) {
+        let hash = 0;
+        for (let i = 0; i < value.length; i += 1) {
+          hash = (hash << 5) - hash + value.charCodeAt(i);
+          hash |= 0;
+        }
+        return Math.abs(hash);
+      }
+
+      const swedenAnchors = [
+        [59.3293, 18.0686], // Stockholm
+        [59.2741, 15.2066], // Orebro
+        [58.4108, 15.6214], // Linkoping
+        [57.7826, 14.1618], // Jonkoping
+        [60.6749, 17.1413], // Gavle
+        [59.8586, 17.6389], // Uppsala
+        [56.8790, 14.8059], // Vaxjo
+        [63.1792, 14.6357], // Ostersund
+        [62.3908, 17.3069], // Sundsvall
+        [63.8258, 20.2630], // Umea
+        [65.5848, 22.1547], // Lulea
+        [60.4858, 15.4362], // Falun
+      ];
+
+      function pseudoCoordFromCve(cve) {
+        const seed = hashString(cve || "kev-item");
+        // Use fixed inland anchors only. KEV has no geodata, so this is purely visual.
+        return swedenAnchors[seed % swedenAnchors.length];
+      }
+
+      function renderThreatMap(payload) {
+        if (!threatMap || !threatMapLayer) return;
+        threatMapLayer.clearLayers();
+        const latest = payload.latest || [];
+        latest.slice(0, 20).forEach((item) => {
+          const [lat, lon] = pseudoCoordFromCve(item.cve || `${item.vendor}-${item.product}`);
+          const size = 5 + (hashString(item.cve || item.product || "x") % 3);
+          const icon = L.divIcon({
+            className: "threat-dot",
+            iconSize: [size, size],
+            iconAnchor: [Math.floor(size / 2), Math.floor(size / 2)],
           });
-          firebaseIdToken = data.idToken;
-          localStorage.setItem("firebaseIdToken", firebaseIdToken);
-          setAuthStatus(`Authenticated as ${email}`);
-          await loadUploads();
-        } catch (error) {
-          setAuthStatus(error.message, "error");
-        }
-      });
-
-      loginBtn.addEventListener("click", async () => {
-        try {
-          if (authMode !== "firebase") {
-            throw new Error("Auth is disabled (AUTH_MODE=off)");
-          }
-          const email = emailInput.value.trim();
-          const password = passwordInput.value;
-          if (!email || !password) {
-            throw new Error("Email and password required");
-          }
-          const data = await firebaseAuthRequest("accounts:signInWithPassword", {
-            email,
-            password,
-            returnSecureToken: true,
-          });
-          firebaseIdToken = data.idToken;
-          localStorage.setItem("firebaseIdToken", firebaseIdToken);
-          setAuthStatus(`Authenticated as ${email}`);
-          await loadUploads();
-        } catch (error) {
-          setAuthStatus(error.message, "error");
-        }
-      });
-
-      logoutBtn.addEventListener("click", async () => {
-        firebaseIdToken = "";
-        localStorage.removeItem("firebaseIdToken");
-        setAuthStatus("Not authenticated");
-        await loadUploads();
-      });
+          const marker = L.marker([lat, lon], { icon }).addTo(threatMapLayer);
+          marker.bindPopup(`<strong>${item.cve || "CVE"}</strong><br>${item.vendor || ""} ${item.product || ""}<br>${item.date_added || ""}`);
+        });
+      }
 
       dropzone.addEventListener("dragover", (event) => {
         event.preventDefault();
@@ -281,7 +365,7 @@
 
       async function loadUploads() {
         try {
-          const response = await fetch("/uploads", { headers: requestHeaders() });
+          const response = await fetch("/uploads?limit=25");
           if (!response.ok) {
             if (response.status === 401) {
               throw new Error("Auth required");
@@ -296,22 +380,99 @@
             return;
           }
           data.items.forEach((item) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "upload-item";
+
             const row = document.createElement("div");
-            row.className = "list-item";
+            row.className = "list-item list-item-toggle";
+            row.setAttribute("role", "button");
+            row.setAttribute("tabindex", "0");
+            row.setAttribute("aria-expanded", "false");
+            row.title = "Click to show scan details";
             const nameSpan = document.createElement("span");
             nameSpan.textContent = item.filename;
             const typeSpan = document.createElement("span");
             typeSpan.textContent = item.content_type;
             const statusSpan = document.createElement("span");
             statusSpan.textContent = item.status;
+            if (item.status === "rejected") {
+              statusSpan.classList.add("status-malicious");
+            } else if (item.status === "accepted") {
+              statusSpan.classList.add("status-clean");
+            } else {
+              statusSpan.classList.add("status-review");
+            }
             row.appendChild(nameSpan);
             row.appendChild(typeSpan);
             row.appendChild(statusSpan);
-            list.appendChild(row);
+
+            const details = document.createElement("div");
+            details.className = "upload-details";
+            details.hidden = true;
+            details.style.display = "none";
+            details.appendChild(detailRow("Result", item.scan_status || "unknown"));
+            details.appendChild(detailRow("Decision", item.decision || "-", item.decision === "rejected" ? "status-malicious" : item.decision === "accepted" ? "status-clean" : "status-review"));
+            details.appendChild(detailRow("Risk score", typeof item.risk_score === "number" ? `${item.risk_score}/100` : "-"));
+            details.appendChild(detailRow("Engine", item.scan_engine || "-"));
+            details.appendChild(detailRow("Detail", item.scan_detail || "-"));
+            details.appendChild(detailRow("Deduplicated", item.deduplicated ? "Yes" : "No"));
+            details.appendChild(detailRow("SHA-256", item.sha256 || "-"));
+
+            const toggleDetails = () => {
+              const isOpen = wrapper.classList.toggle("is-open");
+              details.hidden = !isOpen;
+              details.style.display = isOpen ? "grid" : "none";
+              row.setAttribute("aria-expanded", isOpen ? "true" : "false");
+              // Keep the side panel in sync with selected row.
+              setScanResult(item);
+            };
+            row.addEventListener("click", toggleDetails);
+            row.addEventListener("keydown", (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleDetails();
+              }
+            });
+
+            wrapper.appendChild(row);
+            wrapper.appendChild(details);
+            list.appendChild(wrapper);
           });
         } catch (error) {
           const list = document.getElementById("uploads-list");
           list.innerHTML = `<div class="list-item">${error.message}</div>`;
+        }
+      }
+
+      async function loadMetrics() {
+        try {
+          const response = await fetch("/metrics/summary");
+          if (!response.ok) {
+            throw new Error("Metrics unavailable");
+          }
+          const data = await response.json();
+          setMetrics(data);
+        } catch (_error) {
+          metricUploads24hEl.textContent = "-";
+          metricRejected24hEl.textContent = "-";
+          metricRejectRate7dEl.textContent = "-";
+          metricRisk7dEl.textContent = "-";
+        }
+      }
+
+      async function loadThreatFeed() {
+        try {
+          const response = await fetch("/external/threats/kev-summary");
+          if (!response.ok) {
+            throw new Error("Threat feed unavailable");
+          }
+          const data = await response.json();
+          renderThreatFeed(data);
+          renderThreatMap(data);
+        } catch (_error) {
+          if (threatFeedStatusEl) {
+            threatFeedStatusEl.textContent = "Unable to load threat feed right now.";
+          }
         }
       }
 
@@ -336,34 +497,19 @@
             throw new Error(data.detail || "Upload failed");
           }
           setStatus(`Accepted: ${data.filename} (${data.content_type})`);
+          setScanResult(data);
           await loadUploads();
+          await loadMetrics();
         } catch (error) {
           setStatus(error.message, "error");
         }
       });
 
-      async function initAuthConfig() {
-        try {
-          const response = await fetch("/auth/config");
-          if (!response.ok) {
-            throw new Error("Could not load auth config");
-          }
-          const config = await response.json();
-          authMode = config.mode || "off";
-          firebaseWebApiKey = config.firebase_web_api_key || "";
-        } catch (error) {
-          authMode = "off";
-          firebaseWebApiKey = "";
-        }
-
-        if (authMode === "firebase") {
-          setAuthStatus(firebaseIdToken ? "Token loaded from browser storage" : "Not authenticated");
-        } else {
-          setAuthStatus("Auth disabled (AUTH_MODE=off)");
-        }
-      }
-
-      initAuthConfig().then(loadUploads);
+      loadUploads();
+      loadMetrics();
+      initThreatMap();
+      loadThreatFeed();
+      setInterval(loadThreatFeed, 60000);
     </script>
     <a
   class="bug-fab"

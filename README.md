@@ -74,12 +74,6 @@ Nginx reverse proxy
 - FastAPI is internal-only in the compose network.
 - Nginx host port is configurable (`NGINX_HOST_PORT`, default `8080`).
 
-Nginx reverse proxy
-
-- Nginx is now the public entrypoint in docker compose.
-- FastAPI is internal-only in the compose network.
-- Nginx host port is configurable (`NGINX_HOST_PORT`, default `8080`).
-
 MongoDB
 
 - Local mode: keep `MONGODB_URI` unset/commented so app uses local Mongo service.
@@ -110,6 +104,20 @@ List uploads (requires MongoDB)
 
 ```powershell
 curl http://localhost:8080/uploads
+```
+
+You can override list size with query param, e.g. `GET /uploads?limit=25`.
+
+Metrics summary (requires MongoDB)
+
+```powershell
+curl http://localhost:8080/metrics/summary
+```
+
+Threat feed proxy (cached, backend controlled)
+
+```powershell
+curl http://localhost:8080/external/threats/kev-summary
 ```
 
 Upload (PowerShell)
@@ -153,7 +161,7 @@ Quality and infrastructure improvements
 Upload scanning behavior
 
 - Files are scanned in-memory (no file content is persisted).
-- MongoDB stores upload metadata and scan outcome (`scan_status`, `scan_engine`, `scan_detail`).
+- MongoDB stores upload metadata and scan outcome (`scan_status`, `scan_engine`, `scan_detail`), plus risk metadata (`risk_score`, `decision`, `risk_reasons`) and content hash (`sha256`).
 - Upload endpoint rate limiting is enabled (`10/minute` per client IP) to reduce burst uploads/abuse.
 - Configure rate limit with `UPLOAD_RATE_LIMIT_PER_MINUTE` (default `10`) and `UPLOAD_RATE_LIMIT_WINDOW_SECONDS` (default `60`).
 - In GitHub Actions CI, configure repo variables `UPLOAD_RATE_LIMIT_PER_MINUTE_CI` and `UPLOAD_RATE_LIMIT_WINDOW_SECONDS_CI` (workflow falls back to `120` and `60`).
@@ -164,6 +172,29 @@ Upload scanning behavior
 - Use local Docker Compose or Kubernetes when you need full ClamAV runtime scans.
 - Mock scanner flags EICAR marker and suspicious filename patterns.
 - Upload policy is fail-closed: non-clean scan results (`malicious` or `error`) are rejected.
+- Deduplication is enabled by content hash (`sha256`): repeated uploads of identical content reuse prior scan result and are marked `deduplicated=true`.
+- Risk scoring is returned on each upload:
+  - `0-29` => `decision=accepted`
+  - `30-69` => `decision=review`
+  - `70-100` => `decision=rejected`
+- Trend metrics are available at `/metrics/summary` with windows for `last_24h`, `last_7d`, and `all_time`.
+- CISA KEV feed is fetched via backend proxy `/external/threats/kev-summary` (cached and rate-limited).
+- KEV requests include explicit `User-Agent` and enforce minimum interval (`CISA_KEV_MIN_SECONDS_BETWEEN_CALLS`, default 300s).
+- Upload retention is controlled by MongoDB TTL index on `created_at` (default `UPLOAD_RETENTION_DAYS=30`).
+- Upload list defaults to `UPLOAD_LIST_LIMIT_DEFAULT=25` and is capped by `UPLOAD_LIST_LIMIT_MAX=100`.
+
+Authentication
+
+- Firebase authentication has been removed from the upload flow.
+- `/upload` and `/uploads` are now available without bearer tokens.
+- `AUTH_MODE` remains in configuration and should be set to `off`.
+
+CI troubleshooting (rate limit)
+
+- If CI gets unexpected `429` responses, increase `UPLOAD_RATE_LIMIT_PER_MINUTE_CI` (start with `120`, then `300` for bursty test runs).
+- Keep `UPLOAD_RATE_LIMIT_WINDOW_SECONDS_CI=60` unless you need a shorter/longer evaluation window.
+- If CI should mimic production behavior, set CI variables to the same values as production env vars.
+- The rate-limit test overrides limiter constants in-test, so CI variable tuning should not break that test.
 
 Authentication (Firebase)
 
@@ -198,6 +229,27 @@ Publish on a subdomain (production outline)
    - Keep `.env` only on server (never commit secrets).
    - Restrict firewall to ports `80/443` only.
 
+Kubernetes ingress note (current production fix)
+
+- We run `ingress-nginx` as the active ingress controller in Kubernetes.
+- `k8s/base/ingress.yaml` uses `ingressClassName: nginx` and points to service port `8000`.
+- `k8s/base/service.yaml` exposes `port: 8000` -> `targetPort: 8000`.
+- `k8s/base/networkpolicy.yaml` allows ingress from namespace `ingress-nginx` to API port `8000`.
+- NGINX ingress is configured with `nginx.ingress.kubernetes.io/service-upstream: "true"` to route via Service ClusterIP (stable path in this cluster), which resolved recurring `502 Bad Gateway` from direct pod upstream routing.
+
+Kubernetes HTTPS (cert-manager + Let's Encrypt)
+
+- TLS is enabled in `k8s/base/ingress.yaml` with:
+  - `cert-manager.io/cluster-issuer: letsencrypt-prod`
+  - `tls.secretName: sentinel-upload-tls`
+- `ClusterIssuer` should use HTTP-01 with ingress class `nginx`.
+- In this environment, challenge routing needed NGINX service-upstream behavior to avoid `502` during ACME validation.
+- Verify certificate readiness:
+  - `kubectl -n sentinel get certificate`
+  - `kubectl -n sentinel get secret sentinel-upload-tls`
+- Validate over HTTPS:
+  - `curl -i https://sentinel-upload.secion.se/health` (GET should return `200`)
+
 Expected response
 
 Optional: Run locally (venv)
@@ -210,7 +262,7 @@ uvicorn app.main:app --reload
 ```
 
 ```json
-{"filename":"README.md","content_type":"text/markdown","status":"accepted"}
+{"filename":"README.md","sha256":"...","content_type":"text/markdown","status":"accepted","decision":"accepted","risk_score":10,"risk_reasons":["No malicious signature detected"],"scan_status":"clean","scan_engine":"mock","scan_detail":"No signature matched","deduplicated":false}
 ```
 
 
