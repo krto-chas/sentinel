@@ -527,7 +527,6 @@
           setStatus("Uploading...");
           const response = await fetch("/upload", {
             method: "POST",
-            headers: requestHeaders(),
             body: formData,
           });
           const data = await response.json();
