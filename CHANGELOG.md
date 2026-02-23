@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-02-23
+
+- Added safer ThreatFox secret handling: `THREATFOX_API_KEY_FILE` support plus documented Secret-first usage across local/Kubernetes.
+- Added threat-intel policy controls for volume/risk tuning: `THREAT_INTEL_ALLOWED_SOURCES`, `THREAT_INTEL_MIN_CONFIDENCE`, `THREAT_INTEL_MAX_EVENTS_PER_RUN`.
+- Updated ingestion job to apply source allowlist and confidence/volume filtering before DB writes.
+- Replaced mutable `latest` image references in runtime manifests with explicit non-`latest` tags.
+- Documented GeoIP limitations in README to clarify that map positions are approximate and non-attributive.
+
+## 2026-02-21
+
+- Added threat-intel feed expansion: Feodo + URLhaus + ThreatFox ingestion pipeline in `app/services/threat_intel.py`.
+- Added map clustering and richer threat popup details in the UI.
+- Added ThreatFox API compatibility guard (`THREATFOX_DAYS` clamped to 1..7).
+- Added URLhaus shape handling for multiple JSON response variants.
+- Security hardening lesson applied: hostname-to-IP DNS resolution is now disabled by default (`THREAT_RESOLVE_DOMAINS=false`) to reduce unintended outbound DNS lookups to suspicious IOC domains.
+
 ## 2026-02-18
 
 - Replaced hero image panel with cyber threat feed panel powered by backend endpoint `/external/threats/kev-summary` (CISA KEV).

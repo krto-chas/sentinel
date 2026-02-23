@@ -26,5 +26,8 @@ USER 10001:10001
 
 EXPOSE 8000
 
+# Kopiera GeoLite2-databasen (som inte är i .gitignore) till image:en
+COPY assets/GeoLite2-City.mmdb /app/assets/GeoLite2-City.mmdb
+
 # Kör Uvicorn (FastAPI)
 CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

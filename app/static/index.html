@@ -16,6 +16,14 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -46,7 +54,7 @@
           <div class="hero-map-wrap">
             <div class="hero-map-head">
               <h2>Incident Pulse (Visualized)</h2>
-              <small>Animated distribution based on current KEV items.</small>
+              <small>Live Feodo/URLhaus/ThreatFox feed. GeoIP positions are approximate.</small>
             </div>
             <div id="threat-map" class="threat-map" aria-label="Threat activity map"></div>
           </div>
@@ -142,6 +150,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script>
       const threatFeedStatusEl = document.getElementById("threat-feed-status");
       const threatFeedListEl = document.getElementById("threat-feed-list");
@@ -264,65 +273,80 @@
 
       function initThreatMap() {
         if (!threatMapEl || typeof L === "undefined") return;
+        const worldBounds = L.latLngBounds(
+          L.latLng(-85, -180),
+          L.latLng(85, 180),
+        );
         threatMap = L.map("threat-map", {
           zoomControl: false,
           attributionControl: true,
-          minZoom: 4,
+          minZoom: 1,
           maxZoom: 8,
-        }).setView([62.1, 16.2], 5);
+          maxBounds: worldBounds,
+          maxBoundsViscosity: 1.0,
+        }).setView([20, 0], 2);
         L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
           maxZoom: 8,
           subdomains: "abcd",
+          noWrap: true,
           attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
         }).addTo(threatMap);
-        threatMapLayer = L.layerGroup().addTo(threatMap);
-      }
-
-      function hashString(value) {
-        let hash = 0;
-        for (let i = 0; i < value.length; i += 1) {
-          hash = (hash << 5) - hash + value.charCodeAt(i);
-          hash |= 0;
+        if (typeof L.markerClusterGroup === "function") {
+          threatMapLayer = L.markerClusterGroup({
+            showCoverageOnHover: false,
+            spiderfyOnMaxZoom: true,
+            maxClusterRadius: 42,
+          });
+          threatMap.addLayer(threatMapLayer);
+        } else {
+          threatMapLayer = L.layerGroup().addTo(threatMap);
         }
-        return Math.abs(hash);
       }
 
-      const swedenAnchors = [
-        [59.3293, 18.0686], // Stockholm
-        [59.2741, 15.2066], // Orebro
-        [58.4108, 15.6214], // Linkoping
-        [57.7826, 14.1618], // Jonkoping
-        [60.6749, 17.1413], // Gavle
-        [59.8586, 17.6389], // Uppsala
-        [56.8790, 14.8059], // Vaxjo
-        [63.1792, 14.6357], // Ostersund
-        [62.3908, 17.3069], // Sundsvall
-        [63.8258, 20.2630], // Umea
-        [65.5848, 22.1547], // Lulea
-        [60.4858, 15.4362], // Falun
-      ];
-
-      function pseudoCoordFromCve(cve) {
-        const seed = hashString(cve || "kev-item");
-        // Use fixed inland anchors only. KEV has no geodata, so this is purely visual.
-        return swedenAnchors[seed % swedenAnchors.length];
-      }
-
-      function renderThreatMap(payload) {
+      function renderThreatMap(events) {
         if (!threatMap || !threatMapLayer) return;
         threatMapLayer.clearLayers();
-        const latest = payload.latest || [];
-        latest.slice(0, 20).forEach((item) => {
-          const [lat, lon] = pseudoCoordFromCve(item.cve || `${item.vendor}-${item.product}`);
-          const size = 5 + (hashString(item.cve || item.product || "x") % 3);
+        const points = [];
+        const coordBuckets = new Map();
+        (events || []).forEach((item) => {
+          const lat = Number(item.lat);
+          const lon = Number(item.lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+          const severity = (item.severity || "").toLowerCase();
+          const size = severity === "high" ? 8 : severity === "medium" ? 7 : 6;
+          const bucketKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+          const bucketIndex = coordBuckets.get(bucketKey) || 0;
+          coordBuckets.set(bucketKey, bucketIndex + 1);
+
+          // If several events share identical coordinates, fan them out slightly
+          // so all markers become visible instead of stacking as one.
+          const angle = bucketIndex * (Math.PI / 4);
+          const radius = Math.floor(bucketIndex / 8) * 0.18 + (bucketIndex > 0 ? 0.12 : 0);
+          const markerLat = lat + radius * Math.sin(angle);
+          const markerLon = lon + radius * Math.cos(angle);
+
           const icon = L.divIcon({
             className: "threat-dot",
             iconSize: [size, size],
             iconAnchor: [Math.floor(size / 2), Math.floor(size / 2)],
           });
-          const marker = L.marker([lat, lon], { icon }).addTo(threatMapLayer);
-          marker.bindPopup(`<strong>${item.cve || "CVE"}</strong><br>${item.vendor || ""} ${item.product || ""}<br>${item.date_added || ""}`);
+          const marker = L.marker([markerLat, markerLon], { icon, title: item.ioc || item.type || "Threat event" }).addTo(threatMapLayer);
+          marker.bindPopup(
+            `<strong>${item.type || "Threat event"}</strong><br>` +
+            `${item.ioc || ""}<br>` +
+            `${item.details?.city || ""} ${item.details?.country ? `(${item.details.country})` : ""}<br>` +
+            `${item.details?.malware_family ? `Malware: ${item.details.malware_family}<br>` : ""}` +
+            `${item.details?.status ? `Status: ${item.details.status}<br>` : ""}` +
+            `${typeof item.confidence === "number" ? `Confidence: ${item.confidence}%<br>` : ""}` +
+            `${item.source || ""}<br>` +
+            `${item.timestamp || ""}`
+          );
+          points.push([markerLat, markerLon]);
         });
+        if (points.length > 1) {
+          threatMap.fitBounds(points, { padding: [20, 20], maxZoom: 6 });
+        }
       }
 
       dropzone.addEventListener("dragover", (event) => {
@@ -468,10 +492,24 @@
           }
           const data = await response.json();
           renderThreatFeed(data);
-          renderThreatMap(data);
         } catch (_error) {
           if (threatFeedStatusEl) {
             threatFeedStatusEl.textContent = "Unable to load threat feed right now.";
+          }
+        }
+      }
+
+      async function loadThreatMapEvents() {
+        try {
+          const response = await fetch("/api/v1/threats/?limit=200");
+          if (!response.ok) {
+            throw new Error("Threat map data unavailable");
+          }
+          const events = await response.json();
+          renderThreatMap(events);
+        } catch (_error) {
+          if (threatMapLayer) {
+            threatMapLayer.clearLayers();
           }
         }
       }
@@ -509,7 +547,11 @@
       loadMetrics();
       initThreatMap();
       loadThreatFeed();
-      setInterval(loadThreatFeed, 60000);
+      loadThreatMapEvents();
+      setInterval(() => {
+        loadThreatFeed();
+        loadThreatMapEvents();
+      }, 60000);
     </script>
     <a
   class="bug-fab"

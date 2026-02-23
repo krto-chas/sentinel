@@ -10,7 +10,7 @@ services:
         condition: service_started
 
   clamav:
-    image: clamav/clamav:latest
+    image: clamav/clamav:1.4
     ports:
       - "3310:3310"
     healthcheck:
@@ -51,6 +51,8 @@ services:
       - CLAMAV_TIMEOUT_SECONDS=${CLAMAV_TIMEOUT_SECONDS:-5}
       - UPLOAD_RATE_LIMIT_PER_MINUTE=${UPLOAD_RATE_LIMIT_PER_MINUTE:-10}
       - UPLOAD_RATE_LIMIT_WINDOW_SECONDS=${UPLOAD_RATE_LIMIT_WINDOW_SECONDS:-60}
+      - THREATFOX_API_KEY=${THREATFOX_API_KEY:-}
+      - THREATFOX_API_KEY_FILE=${THREATFOX_API_KEY_FILE:-}
     depends_on:
       clamav:
         condition: service_healthy

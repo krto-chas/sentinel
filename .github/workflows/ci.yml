@@ -52,6 +52,12 @@ jobs:
         run: |
           pytest -q
 
+      - name: Download GeoIP Database
+        run: |
+          mkdir -p assets
+          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXWIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
+          tar -xzf GeoLite2-City.tar.gz --strip-components=1 -C assets
+
       - name: Build Docker image (no push)
         run: |
           docker build --pull --no-cache -f docker/Dockerfile -t sentinel-upload-api:ci .
@@ -125,13 +131,24 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Validate Docker secrets
+        run: |
+          test -n "${{ secrets.DOCKER_IMAGE }}" || (echo "DOCKER_IMAGE missing" && exit 1)
+          test -n "${{ secrets.DOCKER_USERNAME }}" || (echo "DOCKER_USERNAME missing" && exit 1)
+          test -n "${{ secrets.DOCKER_PASSWORD }}" || (echo "DOCKER_PASSWORD missing" && exit 1)
+
+      - name: Validate DOCKER_IMAGE format
+        run: |
+          echo "${{ secrets.DOCKER_IMAGE }}" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*$' \
+            || (echo "DOCKER_IMAGE must be owner/repo (no tag, no protocol)" && exit 1)
+
       - name: Determine tags
         id: tags
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             {
               echo "value<<EOF"
-              echo "${{ env.DOCKER_IMAGE }}:latest"
+              echo "${{ env.DOCKER_IMAGE }}:main"
               echo "${{ env.DOCKER_IMAGE }}:${{ github.sha }}"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
@@ -143,6 +160,12 @@ jobs:
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Download GeoIP Database
+        run: |
+          mkdir -p assets
+          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXWIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
+          tar -xzf GeoLite2-City.tar.gz --strip-components=1 -C assets
 
       - name: Build and push image
         uses: docker/build-push-action@v6

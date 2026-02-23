@@ -18,6 +18,9 @@ from fastapi.staticfiles import StaticFiles
 from app.db import get_db, ensure_upload_indexes
 from app.models import UploadRecord
 from app.scanner import scan_bytes
+from app.routers import threats
+from app.services.threat_intel import run_threat_intel_update_job, setup_database_indexes
+from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger("sentinel")
 
@@ -27,6 +30,8 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+app.include_router(threats.router)
 
 ALLOWED_CONTENT_TYPES = {
     # Text
@@ -151,6 +156,22 @@ async def startup():
     except Exception:
         # App should stay available even if DB indexes can't be ensured at startup.
         logger.exception("Failed to ensure MongoDB indexes on startup")
+    
+    # Start Threat Intel Scheduler
+    try:
+        setup_database_indexes()
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(run_threat_intel_update_job, 'date') # Run immediately
+        scheduler.add_job(run_threat_intel_update_job, 'interval', minutes=15)
+        scheduler.start()
+        app.state.scheduler = scheduler
+    except Exception:
+        logger.exception("Failed to initialize Threat Intel service")
+
+@app.on_event("shutdown")
+def shutdown():
+    if hasattr(app.state, 'scheduler'):
+        app.state.scheduler.shutdown()
 
 
 @app.get("/")

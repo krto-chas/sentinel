@@ -120,6 +120,35 @@ Threat feed proxy (cached, backend controlled)
 curl http://localhost:8080/external/threats/kev-summary
 ```
 
+Threat-intel map feed (GeoIP-enriched events)
+
+```powershell
+curl http://localhost:8080/api/v1/threats/?limit=200
+```
+
+Threat-intel ingestion safety note
+
+- IOC feeds may include malicious domains/hosts.
+- To reduce outbound risk, hostname DNS resolution is disabled by default:
+  - `THREAT_RESOLVE_DOMAINS=false`
+- This means only IOCs that already contain usable IPs are geolocated by default.
+- If you explicitly need domain resolution, enable it in a controlled environment:
+  - `THREAT_RESOLVE_DOMAINS=true`
+- Recommendation: run feed enrichment on isolated infrastructure, not on personal workstations.
+
+ThreatFox API key handling (local + Kubernetes)
+
+- Local: set `THREATFOX_API_KEY` in `.env` (or use `THREATFOX_API_KEY_FILE` to read from a mounted file path).
+- Kubernetes: store `THREATFOX_API_KEY` in `Secret` (`k8s/base/secret.yaml`), not in `ConfigMap`.
+- Do not commit API keys. Keep `.env`, secret manifests with real values, and credential exports out of git.
+
+Threat-intel feed policy controls (volume vs risk)
+
+- `THREAT_INTEL_ALLOWED_SOURCES` controls which sources run per update (`Feodo Tracker,URLhaus,ThreatFox`).
+- `THREAT_INTEL_MIN_CONFIDENCE` drops low-confidence events before persistence.
+- `THREAT_INTEL_MAX_EVENTS_PER_RUN` caps ingestion volume per job run.
+- Keep `THREAT_RESOLVE_DOMAINS=false` for normal operations; enable only in isolated enrichment environments.
+
 Upload (PowerShell)
 
 ```powershell
@@ -237,6 +266,15 @@ Kubernetes ingress note (current production fix)
 - `k8s/base/networkpolicy.yaml` allows ingress from namespace `ingress-nginx` to API port `8000`.
 - NGINX ingress is configured with `nginx.ingress.kubernetes.io/service-upstream: "true"` to route via Service ClusterIP (stable path in this cluster), which resolved recurring `502 Bad Gateway` from direct pod upstream routing.
 
+Image tag policy (avoid mutable `latest` in deployments)
+
+- Kubernetes manifests should reference explicit version tags (or immutable SHA digests) for predictable rollouts.
+- Current baseline in this repo uses versioned tags for third-party images and non-`latest` app tags.
+- Branch policy:
+  - `main` branch publishes production image tags used by `sentinel-upload.secion.se`.
+  - `develop` branch publishes development tags for test/dev environments only.
+- Recommended production practice: deploy by commit SHA tag from CI (`<image>:<git-sha>`).
+
 Kubernetes HTTPS (cert-manager + Let's Encrypt)
 
 - TLS is enabled in `k8s/base/ingress.yaml` with:
@@ -249,6 +287,12 @@ Kubernetes HTTPS (cert-manager + Let's Encrypt)
   - `kubectl -n sentinel get secret sentinel-upload-tls`
 - Validate over HTTPS:
   - `curl -i https://sentinel-upload.secion.se/health` (GET should return `200`)
+
+GeoIP limitations (for reporting and interpretation)
+
+- Threat-map locations are approximate GeoIP placements, not exact attacker locations.
+- Results may reflect ISP, hosting provider, VPN, proxy, NAT, or CDN egress points.
+- Use map data for trends, triage, and visibility; do not treat a single marker as forensic attribution.
 
 Expected response
 
