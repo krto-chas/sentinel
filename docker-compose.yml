@@ -95,6 +95,7 @@ services:
     env_file:
       - .env
     environment:
+      MONGODB_URI: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB:-sentinel_upload}?authSource=admin
       SCANNER_MODE: ${SCANNER_MODE:-auto}
       UPLOAD_RATE_LIMIT_PER_MINUTE: ${UPLOAD_RATE_LIMIT_PER_MINUTE:-10}
       UPLOAD_RATE_LIMIT_WINDOW_SECONDS: ${UPLOAD_RATE_LIMIT_WINDOW_SECONDS:-60}
