@@ -1,0 +1,129 @@
+# =============================================================================
+# Sentinel OT Security Gateway – Custom Falco Rules (Kubernetes ConfigMap)
+# =============================================================================
+#
+# Deploy via Helm (Linux k8s cluster):
+#   helm repo add falcosecurity https://falcosecurity.github.io/charts
+#   helm install falco falcosecurity/falco \
+#     --set driver.kind=modern_ebpf \
+#     --set-file falco.rules_file=./sentinel-rules.yaml \
+#     --namespace falco --create-namespace
+#
+# NOTE: Falco requires a Linux kernel (eBPF/kmod).
+#       It cannot run on Docker Desktop for Windows.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-sentinel-rules
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/part-of: sentinel-platform
+data:
+  sentinel_rules.yaml: |
+    # ─── Helpers ─────────────────────────────────────────────────────────────
+
+    - list: sentinel_containers
+      items: [sentinel_api, sentinel-upload-api]
+
+    - list: sentinel_allowed_processes
+      items: [uvicorn, python3, python, curl, sh]
+
+    # ─── Rule 1: Shell spawned in sentinel container ──────────────────────────
+    # MITRE ATT&CK: T1059 – Command and Scripting Interpreter
+    # NIS2: Art. 21 – Technical security measures / incident detection
+    - rule: Shell spawned in sentinel container
+      desc: >
+        A shell (bash/sh/zsh) was spawned in the Sentinel API container.
+        Indicates possible remote code execution or unauthorized access.
+      condition: >
+        spawned_process and container
+        and container.name in (sentinel_containers)
+        and proc.name in (shell_binaries)
+      output: >
+        Shell spawned in sentinel container
+        (user=%user.name uid=%user.uid container=%container.name
+         image=%container.image.repository:%container.image.tag
+         shell=%proc.name parent=%proc.pname cmdline=%proc.cmdline
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [container, sentinel, MITRE_T1059, shell]
+
+    # ─── Rule 2: Sensitive file access ───────────────────────────────────────
+    # MITRE ATT&CK: T1552 – Unsecured Credentials
+    - rule: Sensitive file accessed in sentinel container
+      desc: >
+        A sensitive system file was read in the Sentinel API container.
+        May indicate credential harvesting or container escape preparation.
+      condition: >
+        open_read and container
+        and container.name in (sentinel_containers)
+        and fd.name in (
+          /etc/passwd, /etc/shadow, /etc/sudoers,
+          /root/.ssh/id_rsa, /root/.ssh/id_ed25519,
+          /var/run/secrets/kubernetes.io/serviceaccount/token
+        )
+      output: >
+        Sensitive file read in sentinel container
+        (file=%fd.name user=%user.name container=%container.name
+         image=%container.image.repository:%container.image.tag
+         proc=%proc.cmdline k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [container, sentinel, MITRE_T1552, filesystem, credentials]
+
+    # ─── Rule 3: Unexpected write outside tmpfs ───────────────────────────────
+    # MITRE ATT&CK: T1565 – Data Manipulation
+    # Container runs with readOnlyRootFilesystem: true.
+    - rule: Unexpected filesystem write in sentinel container
+      desc: >
+        A file write occurred outside /tmp or /app/tmp. The container is
+        configured with readOnlyRootFilesystem: true. Indicates bypass or
+        persistence attempt.
+      condition: >
+        open_write and container
+        and container.name in (sentinel_containers)
+        and not (fd.name startswith /tmp or fd.name startswith /app/tmp or fd.name startswith /proc)
+      output: >
+        Unexpected write in sentinel container
+        (file=%fd.name user=%user.name container=%container.name
+         image=%container.image.repository:%container.image.tag
+         proc=%proc.cmdline k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: ERROR
+      tags: [container, sentinel, MITRE_T1565, filesystem]
+
+    # ─── Rule 4: Unexpected process spawned ──────────────────────────────────
+    # MITRE ATT&CK: T1059 – Command and Scripting Interpreter
+    - rule: Unexpected process in sentinel container
+      desc: >
+        A process was started outside the expected allowlist (uvicorn, python3).
+        May indicate supply chain compromise or attacker activity.
+      condition: >
+        spawned_process and container
+        and container.name in (sentinel_containers)
+        and not proc.name in (sentinel_allowed_processes)
+        and not proc.name startswith python
+      output: >
+        Unexpected process in sentinel container
+        (process=%proc.name parent=%proc.pname user=%user.name
+         container=%container.name cmdline=%proc.cmdline
+         k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [container, sentinel, MITRE_T1059, process]
+
+    # ─── Rule 5: Container running as root ───────────────────────────────────
+    # MITRE ATT&CK: T1611 – Escape to Host
+    - rule: Sentinel container running as root
+      desc: >
+        The Sentinel API container is running as root (uid=0).
+        Policy mandates runAsNonRoot: true.
+      condition: >
+        container and container.name in (sentinel_containers)
+        and user.uid = 0 and spawned_process
+      output: >
+        Sentinel container running as root
+        (user=%user.name uid=%user.uid container=%container.name
+         image=%container.image.repository:%container.image.tag
+         proc=%proc.name k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [container, sentinel, MITRE_T1611, privilege_escalation]

@@ -14,6 +14,8 @@ from urllib import request
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_client import Counter, Histogram
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.db import get_db, ensure_upload_indexes
 from app.models import UploadRecord
@@ -25,6 +27,28 @@ from apscheduler.schedulers.background import BackgroundScheduler
 logger = logging.getLogger("sentinel")
 
 app = FastAPI(title="Sentinel Upload API")
+
+# Prometheus HTTP instrumentation – exposes /metrics in Prometheus text format
+Instrumentator(excluded_handlers=["/metrics", "/health"]).instrument(app).expose(
+    app, include_in_schema=False
+)
+
+# Custom business metrics
+UPLOAD_COUNTER = Counter(
+    "sentinel_uploads_total",
+    "Total file uploads processed",
+    ["status", "decision", "engine"],
+)
+RISK_SCORE_HISTOGRAM = Histogram(
+    "sentinel_risk_score",
+    "Distribution of file risk scores",
+    buckets=[0, 10, 20, 30, 50, 70, 90, 100],
+)
+SCAN_DURATION_HISTOGRAM = Histogram(
+    "sentinel_scan_duration_seconds",
+    "Time spent scanning uploaded files",
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -457,7 +481,10 @@ async def upload(request: Request, file: UploadFile = File(...)):
         logger.exception("Failed to check deduplication for %s", filename)
         db = None
 
+    scan_start = monotonic()
     scan = scan_bytes(filename, content)
+    SCAN_DURATION_HISTOGRAM.observe(monotonic() - scan_start)
+
     risk_score, decision, risk_reasons = compute_risk(
         filename=filename,
         content=content,
@@ -467,6 +494,9 @@ async def upload(request: Request, file: UploadFile = File(...)):
     )
     # Keep fail-closed status behavior for compatibility with existing clients.
     status = "accepted" if scan.status == "clean" else "rejected"
+
+    UPLOAD_COUNTER.labels(status=status, decision=decision, engine=scan.engine).inc()
+    RISK_SCORE_HISTOGRAM.observe(risk_score)
 
     if scan.status != "clean":
         logger.warning(

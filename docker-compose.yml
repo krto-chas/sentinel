@@ -38,6 +38,10 @@ volumes:
     driver: local
   clamav_db:
     driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 # ---------------------------------------------------------------------------
 # SERVICES
@@ -269,4 +273,69 @@ volumes:
         reservations:
           cpus: "0.1"
           memory: 128M
+
+  # --------------------------------------------------------------------------
+  # PROMETHEUS — metrics scraper
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: sentinel_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    networks:
+      - frontend
+    expose:
+      - "9090"
+    # Uncomment for direct Prometheus UI access (debug only):
+    # ports:
+    #   - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+
+  # --------------------------------------------------------------------------
+  # GRAFANA — SLO dashboard (http://localhost:3000)
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: sentinel_grafana
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-sentinel-admin}"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - frontend
+    ports:
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
 >>>>>>> f329656 (Initial commit)

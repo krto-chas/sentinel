@@ -1,0 +1,156 @@
+{
+  "title": "Sentinel Upload API – SLO Dashboard",
+  "uid": "sentinel-slo",
+  "tags": ["sentinel", "slo", "security"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "SLO: Upload Success Rate (target ≥ 99.5%)",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=\"/upload\",status=~\"2..\"}[5m])) / sum(rate(http_requests_total{handler=\"/upload\"}[5m])) * 100",
+          "legendFormat": "Success Rate %",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 95 },
+              { "color": "green", "value": 99.5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "SLO: p95 Upload Latency (target ≤ 500 ms)",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{handler=\"/upload\"}[5m])) by (le)) * 1000",
+          "legendFormat": "p95 Latency ms",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 300 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Upload Rate by Decision",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(sentinel_uploads_total[5m])) by (decision)",
+          "legendFormat": "{{decision}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "accepted" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "rejected" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "review" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Scan Duration p95",
+      "type": "gauge",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(sentinel_scan_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "Scan p95 ms",
+          "refId": "A"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 5000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red", "value": 2000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Uploads by Scanner Engine",
+      "type": "piechart",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "sentinel-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(sentinel_uploads_total) by (engine)",
+          "legendFormat": "{{engine}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "pieType": "pie",
+        "legend": { "displayMode": "list", "placement": "right" }
+      },
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ]
+}

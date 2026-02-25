@@ -6,3 +6,5 @@ motor>=3.5.0
 requests
 apscheduler
 geoip2
+prometheus-client>=0.21.0
+prometheus-fastapi-instrumentator>=7.0.0
