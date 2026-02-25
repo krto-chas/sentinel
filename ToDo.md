@@ -9,7 +9,7 @@
 - [x] Add file-scanning for malicious code to uploaded files (mock scanner)
 - [x] Integrate ClamAV scanner service (auto mode with mock fallback)
 - [x] Enforce fail-closed policy when scanner is unavailable
-- [ ] Sign images with Cosign (bonus)
+- [x] Sign images with Cosign (keyless via GitHub OIDC, ghcr-push job)
 - [x] Add Kubernetes manifests (Deployment, Service, Ingress)
 - [x] Gatekeeper policies: no :latest, non-root, resource limits, labels, readOnlyRootFilesystem
 - [ ] Add Falco runtime rule and test alert

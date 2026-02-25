@@ -1,10 +1,62 @@
+<<<<<<< HEAD
 services:
   nginx:
     image: nginx:1.27-alpine
+=======
+# =============================================================================
+# sentinel-upload-api — Härdad docker-compose för Hetzner-produktion
+# =============================================================================
+# Säkerhetsåtgärder som är applicerade:
+#   - Non-root user (appuser uid 1000) i alla applikationscontainrar
+#   - no-new-privileges: förhindrar privilege escalation via SUID/SGID
+#   - cap_drop: ALL — alla Linux capabilities borttagna som standard
+#   - read_only: true + tmpfs för tillfälliga skrivbehov
+#   - Resurs-limits (CPU + minne) på alla containrar
+#   - Isolerade nätverk — containrar kommunicerar bara med de de behöver
+#   - Ports exponeras bara via Nginx (ingen direkt exponering av API/DB)
+#   - Restart-policy: unless-stopped för produktionsstabilitet
+#   - MongoDB kör med autentisering och intern-only port
+# =============================================================================
+
+name: sentinel
+
+# ---------------------------------------------------------------------------
+# NÄTVERK — minimal kommunikationsyta
+# ---------------------------------------------------------------------------
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+
+# ---------------------------------------------------------------------------
+# VOLYMER — namngivna för tydlighet och enkel backup
+# ---------------------------------------------------------------------------
+volumes:
+  mongodb_data:
+    driver: local
+  clamav_db:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# SERVICES
+# ---------------------------------------------------------------------------
+services:
+
+  # --------------------------------------------------------------------------
+  # NGINX — enda publikt exponerade containern
+  # --------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: sentinel_nginx
+    restart: unless-stopped
+>>>>>>> f329656 (Initial commit)
     ports:
       - "${NGINX_HOST_PORT:-8080}:80"
     volumes:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+<<<<<<< HEAD
     depends_on:
       app:
         condition: service_started
@@ -61,3 +113,160 @@ services:
 
 volumes:
   mongo_data:
+=======
+    networks:
+      - frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:mode=0755
+      - /var/run:mode=0755
+      - /tmp:mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+        reservations:
+          cpus: "0.05"
+          memory: 16M
+
+  # --------------------------------------------------------------------------
+  # API — FastAPI / uvicorn
+  # --------------------------------------------------------------------------
+  api:
+    image: ${DOCKER_IMAGE:-sidesteperror/sentinel-upload-api}:${IMAGE_TAG:-latest}
+    container_name: sentinel_api
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    env_file:
+      - .env
+    environment:
+      SCANNER_MODE: ${SCANNER_MODE:-auto}
+      UPLOAD_RATE_LIMIT_PER_MINUTE: ${UPLOAD_RATE_LIMIT_PER_MINUTE:-10}
+      UPLOAD_RATE_LIMIT_WINDOW_SECONDS: ${UPLOAD_RATE_LIMIT_WINDOW_SECONDS:-60}
+      UPLOAD_RETENTION_DAYS: ${UPLOAD_RETENTION_DAYS:-30}
+      THREAT_RESOLVE_DOMAINS: ${THREAT_RESOLVE_DOMAINS:-false}
+      AUTH_MODE: ${AUTH_MODE:-off}
+    networks:
+      - frontend
+      - backend
+    expose:
+      - "8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /app/tmp:mode=0755
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+
+  # --------------------------------------------------------------------------
+  # CLAMAV — virusskanner
+  # ClamAV behöver root vid uppstart för att sätta rättigheter på sina
+  # kataloger, sedan droppar den själv till clamav-användaren internt.
+  # cap_drop används därför inte här.
+  # --------------------------------------------------------------------------
+  clamav:
+    image: clamav/clamav-debian:stable
+    container_name: sentinel_clamav
+    restart: unless-stopped
+    networks:
+      - backend
+    expose:
+      - "3310"
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc -w 3 localhost 3310 | grep -q PONG"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+        reservations:
+          cpus: "0.1"
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # MONGODB — databas
+  # --------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: sentinel_mongodb
+    restart: unless-stopped
+    networks:
+      - backend
+    expose:
+      - "27017"
+    # OBS: Aktivera porten nedan endast för lokal felsökning, aldrig i produktion
+    # ports:
+    #   - "${MONGO_HOST_PORT:-28017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-sentinel}
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+>>>>>>> f329656 (Initial commit)

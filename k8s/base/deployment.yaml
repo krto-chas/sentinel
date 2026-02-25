@@ -24,7 +24,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: api
-          image: jonitsx/sentinel-upload-api:main
+          image: ghcr.io/jonitsx/sentinel-upload-api:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

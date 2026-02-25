@@ -1,0 +1,63 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${NGINX_HOST_PORT:-8080}:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_started
+
+  clamav:
+    image: clamav/clamav:1.4
+    ports:
+      - "3310:3310"
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc -w 2 localhost 3310 | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  mongo:
+    image: mongo:7
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME:-sentinel}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-change-me}
+    ports:
+      - "${MONGO_HOST_PORT:-28017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet -u $$MONGO_INITDB_ROOT_USERNAME -p $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\" | grep 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      - MONGODB_URI=${MONGODB_URI:-mongodb://${MONGO_ROOT_USERNAME:-sentinel}:${MONGO_ROOT_PASSWORD:-change-me}@mongo:27017/${MONGO_DB:-sentinel_upload}?authSource=admin}
+      - SCANNER_MODE=${SCANNER_MODE:-auto}
+      - CLAMAV_HOST=${CLAMAV_HOST:-clamav}
+      - CLAMAV_PORT=${CLAMAV_PORT:-3310}
+      - CLAMAV_TIMEOUT_SECONDS=${CLAMAV_TIMEOUT_SECONDS:-5}
+      - UPLOAD_RATE_LIMIT_PER_MINUTE=${UPLOAD_RATE_LIMIT_PER_MINUTE:-10}
+      - UPLOAD_RATE_LIMIT_WINDOW_SECONDS=${UPLOAD_RATE_LIMIT_WINDOW_SECONDS:-60}
+      - THREATFOX_API_KEY=${THREATFOX_API_KEY:-}
+      - THREATFOX_API_KEY_FILE=${THREATFOX_API_KEY_FILE:-}
+    depends_on:
+      clamav:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:

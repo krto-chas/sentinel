@@ -1,5 +1,27 @@
 # CHANGELOG
 
+<<<<<<< HEAD
+=======
+## 2026-02-25
+
+- Produced hardened `docker-compose.yml` for Hetzner production deployment replacing the development-oriented compose configuration.
+- Applied `cap_drop: ALL` with minimal capability allowlists on all containers (nginx, api, mongodb).
+- Enabled `no-new-privileges: true` on all containers to prevent privilege escalation via SUID/SGID binaries.
+- Set `read_only: true` on nginx and api containers with `tmpfs` mounts for paths that require write access (`/tmp`, `/var/cache/nginx`, `/var/run`, `/app/tmp`).
+- Added CPU and memory resource limits and reservations on all containers to prevent resource exhaustion.
+- Introduced isolated Docker networks: `frontend` (nginx ↔ api) and `backend` (api ↔ mongodb, api ↔ clamav). Backend network is `internal: true`, blocking all external egress.
+- Removed host-port binding for MongoDB in production configuration. Port `27017` is exposed only within the backend network via `expose`, not `ports`.
+- Added named volumes `mongodb_data` and `clamav_db` for persistent storage with clear backup surface.
+- Switched ClamAV image from `clamav/clamav:1.4-debian` (non-existent tag) to `clamav/clamav-debian:stable` (correct Debian-based repository).
+- Replaced ClamAV healthcheck script (`/usr/local/bin/clamdcheck.sh`, Alpine-specific) with a portable `nc`-based PING/PONG check compatible with the Debian image.
+- Extended ClamAV healthcheck `start_period` to `300s` to accommodate initial signature database download on first start.
+- Removed `cap_drop` from ClamAV service as its entrypoint requires root to set directory ownership before internally dropping privileges.
+- Added `daemon.json` configuration for the Hetzner Docker daemon: `no-new-privileges`, `icc: false` (disables inter-container communication outside defined networks), `live-restore: true`, `userland-proxy: false`, and log rotation (`max-size: 10m`, `max-file: 3`).
+- Produced hardened `Dockerfile` with non-root `appuser` (uid/gid 1000), split production/dev requirements, no test files copied into image, and build-time ownership set correctly for `/app` and `/app/tmp`.
+- Documented that `daemon.json` applies to the Hetzner Linux server only and must not be applied to local Docker Desktop on Windows.
+- Documented that GitHub Actions secrets are CI-only and do not substitute for a local `.env` file during development.
+
+>>>>>>> f329656 (Initial commit)
 ## 2026-02-23
 
 - Added safer ThreatFox secret handling: `THREATFOX_API_KEY_FILE` support plus documented Secret-first usage across local/Kubernetes.
@@ -73,5 +95,9 @@
 
 - Identified a UI bug where the file picker could open twice for some users.
 - Patched `app/static/index.html` to prevent double-trigger from dropzone/label clicks.
+<<<<<<< HEAD
 - Added safer file input handling so the same file can be selected again after upload.
 
+=======
+- Added safer file input handling so the same file can be selected again after upload.
+>>>>>>> f329656 (Initial commit)
