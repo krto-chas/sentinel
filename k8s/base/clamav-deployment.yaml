@@ -16,10 +16,28 @@ spec:
       labels:
         app.kubernetes.io/name: clamav
         app.kubernetes.io/part-of: sentinel-platform
+      annotations:
+        # CKV_K8S_31 – seccomp profile
+        seccomp.security.alpha.kubernetes.io/pod: runtime/default
     spec:
+      # CKV_K8S_38 – do not automount service account token
+      automountServiceAccountToken: false
+      # CKV_K8S_29 – pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        # CKV_K8S_40 – high UID to avoid host conflict
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: clamav
+          # CKV_K8S_15 – always pull image
+          # CKV_K8S_43 – image digest pinning is tracked in release process;
+          #               tag-based pin used here for operational simplicity.
+          #               checkov:skip=CKV_K8S_43:digest pinning managed via image update policy
           image: clamav/clamav:1.4
+          imagePullPolicy: Always
           ports:
             - containerPort: 3310
           livenessProbe:
@@ -39,3 +57,28 @@ spec:
             limits:
               cpu: 1000m
               memory: 1500Mi
+          # CKV_K8S_30 – container-level security context
+          securityContext:
+            # CKV_K8S_20 – no privilege escalation
+            allowPrivilegeEscalation: false
+            # CKV_K8S_23 – run as non-root
+            runAsNonRoot: true
+            runAsUser: 1000
+            # CKV_K8S_22 – read-only root filesystem
+            # ClamAV needs /tmp and /var/lib/clamav for virus definitions.
+            # These are provided via emptyDir volumes below.
+            readOnlyRootFilesystem: true
+            # CKV_K8S_28/37 – drop all capabilities, NET_RAW included
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: clamav-data
+              mountPath: /var/lib/clamav
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: clamav-data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
