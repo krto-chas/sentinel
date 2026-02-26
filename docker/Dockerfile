@@ -23,8 +23,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Installera curl (för healthcheck) och rensa apt-cache direkt
-# hadolint ignore=DL3008 – curl versionspinning undviks avsiktligt;
-# säkerhetsuppdateringar hanteras via regelbundna basimage-uppdateringar (Trivy).
+# Versionspinning undviks avsiktligt – säkerhetsuppdateringar hanteras via Trivy.
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
