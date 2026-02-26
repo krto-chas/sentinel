@@ -96,7 +96,7 @@ def _send_webhook(payload: dict) -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib_request.urlopen(req, timeout=5) as resp:
+        with urllib_request.urlopen(req, timeout=5) as resp:  # nosec B310 – URL from ALERT_WEBHOOK_URL env var, operator-controlled
             logger.info("Alert webhook delivered, status=%s", resp.status)
     except Exception as exc:
         logger.error("Alert webhook failed: %s", exc)

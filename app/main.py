@@ -384,7 +384,7 @@ def _fetch_kev_summary_remote() -> dict:
             "Accept": "application/json",
         },
     )
-    with request.urlopen(req, timeout=CISA_KEV_TIMEOUT_SECONDS) as response:
+    with request.urlopen(req, timeout=CISA_KEV_TIMEOUT_SECONDS) as response:  # nosec B310 – URL validated against CISA_KEV_URL constant, no user input
         payload = response.read().decode("utf-8")
     data = json.loads(payload)
     vulnerabilities = data.get("vulnerabilities", [])
