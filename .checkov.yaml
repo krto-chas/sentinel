@@ -1,0 +1,18 @@
+# .checkov.yaml – Checkov-konfiguration för Sentinel
+#
+# Undantag med motivering:
+#
+# CKV_K8S_43 (Image should use digest):
+#   Image digest-pinning hanteras via CI/CD-pipeline. Cosign signerar och
+#   verifierar imagen vid varje push. Tag-baserad pinning används i manifest
+#   för att underlätta automatiska uppdateringar via Renovate/Dependabot.
+#
+# CKV_K8S_35 (Prefer using secrets as files over secrets as environment variables):
+#   Secrets läses via envFrom från ett Kubernetes Secret-objekt.
+#   Inga plaintext-värden finns i manifesten. Miljövariabler används eftersom
+#   applikationen (FastAPI/uvicorn) läser konfiguration via os.getenv().
+#   Alternativet med filbaserade secrets kräver applikationsändringar.
+
+skip-check:
+  - CKV_K8S_43
+  - CKV_K8S_35

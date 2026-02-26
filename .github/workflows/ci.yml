@@ -133,6 +133,7 @@ jobs:
           soft_fail: false
           output_format: cli
           download_external_modules: false
+          config_file: .checkov.yaml
 
       # ─── Tests with coverage ────────────────────────────────────────────────
       # Kör hela testsviten med pytest och mäter kodtäckning mot app/-modulen.
