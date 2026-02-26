@@ -14,7 +14,8 @@ Hoppas över automatiskt i CI om MongoDB inte är tillgänglig.
 import os
 import pytest
 import pytest_asyncio
-from datetime import UTC, datetime
+from datetime import datetime
+from app.scanner import ScanResult
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi.testclient import TestClient
 
@@ -145,7 +146,6 @@ async def test_metrics_summary_reflects_real_data(integration_client, test_db):
     """GET /metrics/summary ska räkna rätt på riktiga dokument."""
     upload_txt(integration_client, b"clean-file", "clean.txt")
 
-    from app.scanner import ScanResult
 
     r = integration_client.get("/metrics/summary")
     assert r.status_code == 200
@@ -199,7 +199,6 @@ async def test_ensure_upload_indexes_creates_indexes(test_db, monkeypatch):
 @pytest.mark.asyncio
 async def test_malicious_upload_stored_as_rejected(integration_client, test_db, monkeypatch):
     """Malicious-scan ska sparas med status=rejected och risk_score>=70."""
-    from app.scanner import ScanResult
     monkeypatch.setattr(
         "app.main.scan_bytes",
         lambda _f, _c: ScanResult(status="malicious", engine="mock", detail="EICAR"),
