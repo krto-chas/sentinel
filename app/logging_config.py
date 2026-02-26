@@ -18,7 +18,7 @@ import logging
 import logging.config
 import os
 
-from pythonjsonlogger.jsonlogger import JsonFormatter  # type: ignore[import-untyped]
+from pythonjsonlogger.json import JsonFormatter
 
 
 class _SentinelJsonFormatter(JsonFormatter):
