@@ -57,7 +57,7 @@ if not os.path.exists(GEOIP_DB_PATH):
         GEOIP_DB_PATH = local_path
 
 # --- Databasanslutning ---
-client = MongoClient(MONGO_URI)
+client: MongoClient = MongoClient(MONGO_URI)
 db = client[MONGO_DB_NAME]
 threat_events_collection = db["threat_events"]
 

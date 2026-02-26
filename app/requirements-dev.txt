@@ -7,3 +7,4 @@ mypy
 pip-audit
 pip-licenses
 ruff
+types-requests

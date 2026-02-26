@@ -354,7 +354,7 @@ def _build_summary(items: list[dict]) -> dict:
         top_types[ctype] = top_types.get(ctype, 0) + 1
     top_content_types = sorted(
         [{"content_type": k, "count": v} for k, v in top_types.items()],
-        key=lambda row: row["count"],
+        key=lambda row: int(row["count"]),
         reverse=True,
     )[:3]
 

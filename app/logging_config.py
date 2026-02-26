@@ -49,7 +49,7 @@ def setup_logging(level: str | None = None) -> None:
     level: loggningsnivå som sträng, t.ex. "DEBUG", "INFO" (default från
            env-variabeln LOG_LEVEL, annars "INFO").
     """
-    log_level = (level or os.getenv("LOG_LEVEL", "INFO")).upper()
+    log_level = (level or os.getenv("LOG_LEVEL", "INFO") or "INFO").upper()
 
     fmt = _SentinelJsonFormatter(
         fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
