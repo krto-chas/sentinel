@@ -15,3 +15,4 @@ class UploadRecord(BaseModel):
     scan_engine: str = Field(default="mock")
     scan_detail: str = Field(default="No signature matched")
     deduplicated: bool = Field(default=False)
+    user_id: str = Field(default="anonymous")

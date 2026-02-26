@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
 from collections import deque
 from threading import Lock
@@ -23,10 +24,42 @@ from app.scanner import scan_bytes
 from app.routers import threats
 from app.services.threat_intel import run_threat_intel_update_job, setup_database_indexes
 from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi import Depends
+from app.auth import get_current_user
+from app.alerts import maybe_send_alert
+from app.logging_config import setup_logging
 
 logger = logging.getLogger("sentinel")
 
-app = FastAPI(title="Sentinel Upload API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # === STARTUP ===
+    setup_logging()
+    try:
+        await ensure_upload_indexes()
+    except Exception:
+        # App should stay available even if DB indexes can't be ensured at startup.
+        logger.exception("Failed to ensure MongoDB indexes on startup")
+
+    # Start Threat Intel Scheduler
+    try:
+        setup_database_indexes()
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(run_threat_intel_update_job, "date")  # Run immediately
+        scheduler.add_job(run_threat_intel_update_job, "interval", minutes=15)
+        scheduler.start()
+        app.state.scheduler = scheduler
+    except Exception:
+        logger.exception("Failed to initialize Threat Intel service")
+
+    yield  # App körs här
+
+    # === SHUTDOWN ===
+    if hasattr(app.state, "scheduler"):
+        app.state.scheduler.shutdown()
+
+
+app = FastAPI(title="Sentinel Upload API", lifespan=lifespan)
 
 # Prometheus HTTP instrumentation – exposes /metrics in Prometheus text format
 Instrumentator(excluded_handlers=["/metrics", "/health"]).instrument(app).expose(
@@ -172,30 +205,6 @@ def enforce_upload_rate_limit(client_id: str):
 def health():
     return {"status": "ok"}
 
-
-@app.on_event("startup")
-async def startup():
-    try:
-        await ensure_upload_indexes()
-    except Exception:
-        # App should stay available even if DB indexes can't be ensured at startup.
-        logger.exception("Failed to ensure MongoDB indexes on startup")
-    
-    # Start Threat Intel Scheduler
-    try:
-        setup_database_indexes()
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(run_threat_intel_update_job, 'date') # Run immediately
-        scheduler.add_job(run_threat_intel_update_job, 'interval', minutes=15)
-        scheduler.start()
-        app.state.scheduler = scheduler
-    except Exception:
-        logger.exception("Failed to initialize Threat Intel service")
-
-@app.on_event("shutdown")
-def shutdown():
-    if hasattr(app.state, 'scheduler'):
-        app.state.scheduler.shutdown()
 
 
 @app.get("/")
@@ -413,7 +422,7 @@ def _fetch_kev_summary_remote() -> dict:
 
 
 @app.post("/upload")
-async def upload(request: Request, file: UploadFile = File(...)):
+async def upload(request: Request, file: UploadFile = File(...), user_id: str = Depends(get_current_user)):
     client_ip = request.client.host if request.client else "unknown"
     enforce_upload_rate_limit(client_ip)
 
@@ -461,6 +470,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
                 scan_engine=existing.get("scan_engine", "unknown"),
                 scan_detail=existing.get("scan_detail", "Matched previous file hash"),
                 deduplicated=True,
+                user_id=user_id,
             )
             await db.uploads.insert_one(dedup_record.model_dump())
             return {
@@ -521,6 +531,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
         scan_engine=scan.engine,
         scan_detail=scan.detail,
         deduplicated=False,
+        user_id=user_id,
     )
 
     db_status = "skipped"
@@ -532,6 +543,20 @@ async def upload(request: Request, file: UploadFile = File(...)):
     except Exception:
         logger.exception("Failed to store upload record for %s", filename)
         db_status = "unavailable"
+
+    # Skicka alert asynkront om uppladdningen är misstänkt/avvisad
+    await maybe_send_alert(
+        filename=filename,
+        sha256=file_sha256,
+        scan_status=scan.status,
+        scan_engine=scan.engine,
+        scan_detail=scan.detail,
+        decision=decision,
+        risk_score=risk_score,
+        risk_reasons=risk_reasons,
+        user_id=user_id,
+        client_ip=client_ip,
+    )
 
     return {
         "filename": filename,
@@ -546,15 +571,19 @@ async def upload(request: Request, file: UploadFile = File(...)):
         "scan_detail": scan.detail,
         "deduplicated": False,
         "db_status": db_status,
+        "user_id": user_id,
     }
 
 
 @app.get("/uploads")
-async def list_uploads(limit: int = DEFAULT_UPLOAD_LIST_LIMIT):
+async def list_uploads(limit: int = DEFAULT_UPLOAD_LIST_LIMIT, user_id: str = Depends(get_current_user)):
     try:
         safe_limit = max(1, min(limit, MAX_UPLOAD_LIST_LIMIT))
         db = get_db()
-        cursor = db.uploads.find({}, {"_id": 0}).sort("_id", -1).limit(safe_limit)
+        # Om AUTH_MODE är aktivt filtrerar vi på user_id
+        # anonymous (AUTH_MODE=off) ser alla poster för bakåtkompatibilitet
+        query: dict = {} if user_id == "anonymous" else {"user_id": user_id}
+        cursor = db.uploads.find(query, {"_id": 0}).sort("_id", -1).limit(safe_limit)
         items = [item async for item in cursor]
         return {"items": items}
     except Exception:

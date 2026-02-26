@@ -237,3 +237,83 @@ def test_upload_rate_limit_returns_429_when_exceeded(monkeypatch):
         enforce_upload_rate_limit("ci-test-client")
 
     assert exc.value.status_code == 429
+
+
+# ─── Auth-tester ─────────────────────────────────────────────────────────────
+
+def test_upload_without_apikey_returns_401_when_auth_enabled(authed_client):
+    """Uppladdning utan API-nyckel ska returnera 401 när AUTH_MODE=apikey."""
+    files = {"file": ("hello.txt", b"hello", "text/plain")}
+    r = authed_client.post("/upload", files=files)
+    assert r.status_code == 401
+
+
+def test_upload_with_valid_apikey_returns_200(authed_client):
+    """Uppladdning med giltig API-nyckel ska accepteras."""
+    files = {"file": ("hello.txt", b"hello", "text/plain")}
+    r = authed_client.post(
+        "/upload",
+        files=files,
+        headers={"X-API-Key": "test-secret-key"},
+    )
+    assert r.status_code == 200
+    assert r.json()["user_id"] == "testuser"
+
+
+def test_upload_with_invalid_apikey_returns_401(authed_client):
+    """Uppladdning med fel API-nyckel ska returnera 401."""
+    files = {"file": ("hello.txt", b"hello", "text/plain")}
+    r = authed_client.post(
+        "/upload",
+        files=files,
+        headers={"X-API-Key": "wrong-key"},
+    )
+    assert r.status_code == 401
+
+
+def test_upload_user_id_stored_in_response(client):
+    """user_id ska alltid returneras i svaret (anonymous när AUTH_MODE=off)."""
+    files = {"file": ("hello.txt", b"hello", "text/plain")}
+    r = client.post("/upload", files=files)
+    assert r.status_code == 200
+    assert r.json()["user_id"] == "anonymous"
+
+
+# ─── Alert-tester ─────────────────────────────────────────────────────────────
+
+def test_alert_triggered_on_malicious_upload(client, monkeypatch):
+    """maybe_send_alert ska anropas vid malicious-scan."""
+    alert_calls = []
+
+    async def fake_alert(**kwargs):
+        alert_calls.append(kwargs)
+
+    monkeypatch.setattr("app.main.maybe_send_alert", fake_alert)
+
+    from app.scanner import ScanResult
+    monkeypatch.setattr(
+        "app.main.scan_bytes",
+        lambda _f, _c: ScanResult(status="malicious", engine="mock", detail="EICAR"),
+    )
+
+    files = {"file": ("eicar.txt", b"X5O!P%", "text/plain")}
+    r = client.post("/upload", files=files)
+    assert r.status_code == 200
+    assert len(alert_calls) == 1
+    assert alert_calls[0]["scan_status"] == "malicious"
+    assert alert_calls[0]["decision"] == "rejected"
+
+
+def test_alert_not_triggered_on_clean_upload(client, monkeypatch):
+    """maybe_send_alert ska INTE anropas vid ren uppladdning."""
+    alert_calls = []
+
+    async def fake_alert(**kwargs):
+        alert_calls.append(kwargs)
+
+    monkeypatch.setattr("app.main.maybe_send_alert", fake_alert)
+
+    files = {"file": ("hello.txt", b"hello world", "text/plain")}
+    r = client.post("/upload", files=files)
+    assert r.status_code == 200
+    assert len(alert_calls) == 0

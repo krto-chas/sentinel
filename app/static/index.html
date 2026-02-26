@@ -140,6 +140,75 @@
         </div>
       </section>
 
+      <!-- ── Prometheus live metrics ───────────────────────────────────────── -->
+      <section class="panel prometheus-section">
+        <div class="prom-header">
+          <h2>Live Prometheus Metrics</h2>
+          <span class="prom-badge" id="prom-badge">fetching…</span>
+        </div>
+        <p class="meta">Pulled directly from <code>/metrics</code> · refreshes every 15 s</p>
+
+        <div class="prom-grid">
+
+          <!-- Uploads total gauge -->
+          <div class="prom-card">
+            <div class="prom-label">Total uploads</div>
+            <div class="prom-value" id="prom-uploads-total">—</div>
+            <svg class="prom-spark" id="spark-uploads" viewBox="0 0 120 32" preserveAspectRatio="none"></svg>
+            <div class="prom-sublabel">sentinel_uploads_total (all labels)</div>
+          </div>
+
+          <!-- Rejected counter -->
+          <div class="prom-card">
+            <div class="prom-label">Rejected uploads</div>
+            <div class="prom-value" id="prom-uploads-rejected">—</div>
+            <svg class="prom-spark" id="spark-rejected" viewBox="0 0 120 32" preserveAspectRatio="none"></svg>
+            <div class="prom-sublabel">sentinel_uploads_total{status="rejected"}</div>
+          </div>
+
+          <!-- Scan duration p95 -->
+          <div class="prom-card">
+            <div class="prom-label">Scan duration p95</div>
+            <div class="prom-value" id="prom-scan-p95">—</div>
+            <svg class="prom-spark" id="spark-scan" viewBox="0 0 120 32" preserveAspectRatio="none"></svg>
+            <div class="prom-sublabel">sentinel_scan_duration_seconds (p95 est.)</div>
+          </div>
+
+          <!-- Risk score avg -->
+          <div class="prom-card">
+            <div class="prom-label">Avg risk score</div>
+            <div class="prom-value" id="prom-risk-avg">—</div>
+            <svg class="prom-spark" id="spark-risk" viewBox="0 0 120 32" preserveAspectRatio="none"></svg>
+            <div class="prom-sublabel">sentinel_risk_score (sum/count)</div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ── Grafana embed ──────────────────────────────────────────────────── -->
+      <section class="panel grafana-section">
+        <div class="prom-header">
+          <h2>Grafana Dashboard</h2>
+          <span class="grafana-badge">embed</span>
+        </div>
+
+        <!-- Set GRAFANA_URL to your panel URL to enable the embed.
+             Example: http://grafana.example.com/d/abc123/sentinel?orgId=1&kiosk
+             Leave as "" to show the placeholder. -->
+        <div id="grafana-container">
+          <div class="grafana-placeholder" id="grafana-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+              <path d="M7 8h2v5H7zM11 10h2v3h-2zM15 6h2v7h-2z"/>
+            </svg>
+            <p>Grafana not configured</p>
+            <p class="meta">Set <code>GRAFANA_URL</code> in the script below to embed a live panel.</p>
+            <a class="button" href="https://grafana.com/docs/grafana/latest/panels-visualizations/share-panels-dashboards/" target="_blank" rel="noopener">Grafana embed docs ↗</a>
+          </div>
+          <iframe id="grafana-frame" class="grafana-frame" src="" title="Grafana dashboard" allowfullscreen style="display:none"></iframe>
+        </div>
+      </section>
+
       <footer>
         <p>Sentinel Upload API · NordTech AB · DevSecOps program</p>
       </footer>
@@ -561,6 +630,302 @@
 >
   Report bug
 </a>
+
+<style>
+/* ── Prometheus section ──────────────────────────────────────────────────── */
+.prometheus-section {
+  margin-top: 2rem;
+}
+.prom-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+.prom-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(99,255,180,0.12);
+  color: #63ffb4;
+  border: 1px solid rgba(99,255,180,0.25);
+  letter-spacing: 0.04em;
+}
+.prom-badge.error {
+  background: rgba(255,80,80,0.12);
+  color: #ff6b6b;
+  border-color: rgba(255,80,80,0.25);
+}
+.prom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+.prom-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 1rem 1.1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: border-color 0.2s;
+}
+.prom-card:hover {
+  border-color: rgba(99,255,180,0.22);
+}
+.prom-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.45);
+}
+.prom-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.65rem;
+  font-weight: 600;
+  color: #e8f0ff;
+  line-height: 1.1;
+}
+.prom-spark {
+  width: 100%;
+  height: 32px;
+  margin: 0.3rem 0 0.1rem;
+  overflow: visible;
+}
+.prom-sublabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.28);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Grafana section ─────────────────────────────────────────────────────── */
+.grafana-section {
+  margin-top: 2rem;
+}
+.grafana-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255,166,0,0.12);
+  color: #ffb347;
+  border: 1px solid rgba(255,166,0,0.25);
+  letter-spacing: 0.04em;
+}
+.grafana-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 3rem 1rem;
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 10px;
+  margin-top: 1rem;
+  color: rgba(255,255,255,0.35);
+  text-align: center;
+}
+.grafana-placeholder svg {
+  opacity: 0.35;
+}
+.grafana-placeholder p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.grafana-frame {
+  width: 100%;
+  height: 480px;
+  border: none;
+  border-radius: 10px;
+  margin-top: 1rem;
+  background: #111;
+}
+</style>
+
+<script>
+// ── Grafana config ────────────────────────────────────────────────────────
+// Paste your Grafana panel/dashboard URL here to enable the embed.
+// Append ?kiosk or &kiosk to the URL for fullscreen kiosk mode.
+// Example: "http://grafana.example.com/d/abc123/sentinel?orgId=1&kiosk"
+const GRAFANA_URL = "";
+
+(function initGrafana() {
+  if (!GRAFANA_URL) return;
+  const frame = document.getElementById("grafana-frame");
+  const placeholder = document.getElementById("grafana-placeholder");
+  if (!frame || !placeholder) return;
+  frame.src = GRAFANA_URL;
+  frame.style.display = "block";
+  placeholder.style.display = "none";
+})();
+
+// ── Prometheus metrics ────────────────────────────────────────────────────
+// Spark-line history — keeps last N samples per metric
+const SPARK_MAX = 20;
+const sparkHistory = {
+  uploads:  [],
+  rejected: [],
+  scan:     [],
+  risk:     [],
+};
+
+function parsePrometheusText(text) {
+  const result = {};
+  for (const line of text.split("\n")) {
+    if (line.startsWith("#") || !line.trim()) continue;
+    // Match: metric_name{labels} value  OR  metric_name value
+    const m = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*(?:\{[^}]*\})?) +([0-9.eE+\-]+|NaN|Inf|-Inf)/);
+    if (!m) continue;
+    const key = m[1];
+    const val = parseFloat(m[2]);
+    if (!isNaN(val)) result[key] = val;
+  }
+  return result;
+}
+
+function sumByPrefix(parsed, prefix) {
+  return Object.entries(parsed)
+    .filter(([k]) => k.startsWith(prefix))
+    .reduce((acc, [, v]) => acc + v, 0);
+}
+
+function getLabel(parsed, metric, labelKey, labelVal) {
+  // Find a metric line that has a specific label value
+  const target = `${metric}{`;
+  for (const [k, v] of Object.entries(parsed)) {
+    if (!k.startsWith(target)) continue;
+    if (k.includes(`${labelKey}="${labelVal}"`)) return v;
+  }
+  return 0;
+}
+
+function estimateP95(parsed, baseName) {
+  // Use the highest bucket below +Inf to estimate p95
+  // sentinel_scan_duration_seconds_bucket{le="X"}
+  const buckets = [];
+  for (const [k, v] of Object.entries(parsed)) {
+    if (!k.startsWith(`${baseName}_bucket`)) continue;
+    const leM = k.match(/le="([^"]+)"/);
+    if (!leM) continue;
+    const le = parseFloat(leM[1]);
+    if (!isFinite(le)) continue;
+    buckets.push({ le, count: v });
+  }
+  if (!buckets.length) return null;
+  buckets.sort((a, b) => a.le - b.le);
+  const total = parsed[`${baseName}_count`] || 0;
+  if (!total) return null;
+  const p95target = total * 0.95;
+  for (const b of buckets) {
+    if (b.count >= p95target) return b.le;
+  }
+  return buckets[buckets.length - 1].le;
+}
+
+function drawSparkline(svgId, history, color = "#63ffb4") {
+  const svg = document.getElementById(svgId);
+  if (!svg || history.length < 2) return;
+  svg.innerHTML = "";
+  const W = 120, H = 28;
+  const min = Math.min(...history);
+  const max = Math.max(...history);
+  const range = max - min || 1;
+  const pts = history.map((v, i) => {
+    const x = (i / (history.length - 1)) * W;
+    const y = H - ((v - min) / range) * H;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  // Area fill
+  const area = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  area.setAttribute("points", `0,${H} ` + pts.join(" ") + ` ${W},${H}`);
+  area.setAttribute("fill", color.replace(")", ",0.12)").replace("rgb", "rgba").replace("#63ffb4", "rgba(99,255,180,0.10)"));
+  area.setAttribute("stroke", "none");
+  svg.appendChild(area);
+  // Line
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", pts.join(" "));
+  line.setAttribute("fill", "none");
+  line.setAttribute("stroke", color);
+  line.setAttribute("stroke-width", "1.5");
+  line.setAttribute("stroke-linejoin", "round");
+  line.setAttribute("stroke-linecap", "round");
+  svg.appendChild(line);
+  // Last dot
+  const last = pts[pts.length - 1].split(",");
+  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  dot.setAttribute("cx", last[0]);
+  dot.setAttribute("cy", last[1]);
+  dot.setAttribute("r", "2.5");
+  dot.setAttribute("fill", color);
+  svg.appendChild(dot);
+}
+
+function pushHistory(arr, val) {
+  arr.push(val);
+  if (arr.length > SPARK_MAX) arr.shift();
+}
+
+async function loadPrometheusMetrics() {
+  const badge = document.getElementById("prom-badge");
+  try {
+    const res = await fetch("/metrics");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const parsed = parsePrometheusText(text);
+
+    // ── uploads total ────────────────────────────────────────────────────
+    const uploadsTotal = sumByPrefix(parsed, "sentinel_uploads_total{");
+    const uploadsFallback = parsed["sentinel_uploads_total"] || 0;
+    const uploads = uploadsTotal || uploadsFallback;
+    document.getElementById("prom-uploads-total").textContent =
+      uploads > 0 ? uploads.toFixed(0) : "0";
+    pushHistory(sparkHistory.uploads, uploads);
+    drawSparkline("spark-uploads", sparkHistory.uploads, "#63ffb4");
+
+    // ── rejected ─────────────────────────────────────────────────────────
+    const rejected = getLabel(parsed, "sentinel_uploads_total", "status", "rejected");
+    document.getElementById("prom-uploads-rejected").textContent =
+      rejected > 0 ? rejected.toFixed(0) : "0";
+    pushHistory(sparkHistory.rejected, rejected);
+    drawSparkline("spark-rejected", sparkHistory.rejected, "#ff6b6b");
+
+    // ── scan duration p95 ────────────────────────────────────────────────
+    const p95 = estimateP95(parsed, "sentinel_scan_duration_seconds");
+    document.getElementById("prom-scan-p95").textContent =
+      p95 !== null ? `${p95 * 1000 < 1000 ? (p95 * 1000).toFixed(0) + " ms" : p95.toFixed(2) + " s"}` : "—";
+    pushHistory(sparkHistory.scan, p95 || 0);
+    drawSparkline("spark-scan", sparkHistory.scan, "#a78bfa");
+
+    // ── risk score avg ───────────────────────────────────────────────────
+    const riskSum   = parsed["sentinel_risk_score_sum"]   || 0;
+    const riskCount = parsed["sentinel_risk_score_count"] || 0;
+    const riskAvg   = riskCount > 0 ? riskSum / riskCount : 0;
+    document.getElementById("prom-risk-avg").textContent =
+      riskCount > 0 ? riskAvg.toFixed(1) : "—";
+    pushHistory(sparkHistory.risk, riskAvg);
+    drawSparkline("spark-risk", sparkHistory.risk, "#fbbf24");
+
+    // ── badge ────────────────────────────────────────────────────────────
+    const now = new Date();
+    badge.textContent = `updated ${now.toLocaleTimeString()}`;
+    badge.classList.remove("error");
+
+  } catch (err) {
+    badge.textContent = "unavailable";
+    badge.classList.add("error");
+  }
+}
+
+// Initial load + refresh every 15 s
+loadPrometheusMetrics();
+setInterval(loadPrometheusMetrics, 15000);
+</script>
 
   </body>
 </html>

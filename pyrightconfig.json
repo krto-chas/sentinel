@@ -1,0 +1,12 @@
+{
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownParameterType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportMissingTypeArgument": "none",
+  "reportUnknownLambdaType": "none",
+  "reportDeprecated": "warning"
+}

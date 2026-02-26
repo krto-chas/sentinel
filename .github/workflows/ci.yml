@@ -19,7 +19,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Behövs av Gitleaks för full historik
 
+      # ─── Secret scanning ────────────────────────────────────────────────────
+      # Skannar hela git-historiken efter läckta secrets (API-nycklar, lösenord,
+      # tokens etc.) som råkat committats. Körs tidigt i pipeline innan övriga
+      # steg. fetch-depth: 0 ovan säkerställer att hela historiken analyseras.
+      - name: Secret scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─── Python setup ───────────────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -30,38 +42,134 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r app/requirements.txt -r app/requirements-dev.txt
 
+      # ─── Dependency checks ──────────────────────────────────────────────────
+      # Kontrollerar alla produktionsberoenden mot kända CVE-databaser.
+      # Misslyckas om något paket har en känd sårbarhet utan tillgänglig fix.
       - name: Dependency scan (pip-audit)
         run: |
           pip-audit -r app/requirements.txt
 
+      # Verifierar att inga beroenden har licenser (GPL-3.0, AGPL-3.0) som
+      # är juridiskt inkompatibla med kommersiell användning eller distribution.
+      - name: License check (pip-licenses)
+        run: |
+          pip-licenses --fail-on="GPL-3.0;AGPL-3.0" --format=markdown
+
+      # ─── Code quality ───────────────────────────────────────────────────────
+      # Statisk kodanalys med ruff – kontrollerar kodstil, oanvända imports,
+      # potentiella buggar och PEP8-avvikelser i app/ och tests/.
       - name: Lint code (ruff)
         run: |
           ruff check app tests
 
+      # Statisk typkontroll med mypy – verifierar att typannotationer är
+      # korrekta och konsekventa, vilket minskar risken för runtime-fel.
+      - name: Type check (mypy)
+        run: |
+          mypy app/ --ignore-missing-imports
+
+      # ─── SAST ───────────────────────────────────────────────────────────────
+      # Static Application Security Testing med Bandit – analyserar Python-koden
+      # efter vanliga säkerhetsbrister som hardcoded credentials, osäkra
+      # funktionsanrop (eval, exec), SQL-injection-mönster och svag kryptering.
+      # Flaggan -ll rapporterar medium och high severity. Rapporten sparas
+      # alltid som artifact oavsett om steget lyckas eller misslyckas.
+      - name: SAST scan (Bandit)
+        run: |
+          bandit -r app/ -ll -f json -o bandit-report.json || true
+          bandit -r app/ -ll
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+      # ─── Dockerfile linting ─────────────────────────────────────────────────
+      # Granskar Dockerfilen mot best practices med hadolint – kontrollerar bl.a.
+      # att COPY används istället för ADD, att specifika paketversioner pinnas,
+      # att containern inte körs som root, och att lager minimeras korrekt.
+      - name: Lint Dockerfile (hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+          failure-threshold: warning
+
+      # ─── Kubernetes manifest validation ─────────────────────────────────────
+      # Validerar K8s-basmanifesten (Deployment, Service, Ingress, NetworkPolicy)
+      # mot Kubernetes API-schemat för version 1.31.0. Strict-läge innebär att
+      # okända fält och felaktiga strukturer ger fel, inte bara varningar.
       - name: Validate Kubernetes base manifests (kubeconform)
         run: |
           docker run --rm -v ${{ github.workspace }}:/work ghcr.io/yannh/kubeconform:latest \
-            -strict -summary -kubernetes-version 1.31.0 /work/k8s/base/deployment.yaml /work/k8s/base/service.yaml /work/k8s/base/ingress.yaml /work/k8s/base/networkpolicy.yaml
+            -strict -summary -kubernetes-version 1.31.0 \
+            /work/k8s/base/deployment.yaml \
+            /work/k8s/base/service.yaml \
+            /work/k8s/base/ingress.yaml \
+            /work/k8s/base/networkpolicy.yaml
 
+      # Validerar OPA Gatekeeper ConstraintTemplates och Constraints. Dessa
+      # definierar policyer som körs i klustret (t.ex. krav på resource limits,
+      # förbud mot privileged containers). ignore-missing-schemas används eftersom
+      # Gatekeeper-CRD:er inte finns i standard K8s-schemat.
       - name: Validate Gatekeeper templates and constraints (kubeconform)
         run: |
           docker run --rm -v ${{ github.workspace }}:/work ghcr.io/yannh/kubeconform:latest \
-            -summary -ignore-missing-schemas /work/k8s/gatekeeper/constrainttemplates /work/k8s/gatekeeper/constraints
+            -summary -ignore-missing-schemas \
+            /work/k8s/gatekeeper/constrainttemplates \
+            /work/k8s/gatekeeper/constraints
 
-      - name: Run tests
+      # ─── IaC security scanning ──────────────────────────────────────────────
+      # Skannar alla Kubernetes-manifest med Checkov mot CIS Kubernetes Benchmark
+      # och inbyggda säkerhetspolicyer. Kontrollerar bl.a. att containers inte
+      # kör som root, att resource limits är satta, att readOnlyRootFilesystem
+      # används, och att privileged mode är inaktiverat.
+      - name: IaC security scan (Checkov)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: k8s/
+          framework: kubernetes
+          soft_fail: false
+          output_format: cli
+          download_external_modules: false
+
+      # ─── Tests with coverage ────────────────────────────────────────────────
+      # Kör hela testsviten med pytest och mäter kodtäckning mot app/-modulen.
+      # CI misslyckas om täckningen understiger 80%. Rapporten (coverage.xml)
+      # sparas som artifact och kan användas av externa verktyg som Codecov.
+      - name: Run tests with coverage
         run: |
-          pytest -q
+          pytest -q --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      # ─── GeoIP (optional) ───────────────────────────────────────────────────
+      # Laddar ner MaxMind GeoLite2-databasen för IP-geolokalisering i threat-intel
+      # funktionen. continue-on-error: true gör att CI fortsätter även om
+      # MAXMIND_LICENSE_KEY saknas i repo-secrets (t.ex. på forks eller PRs).
       - name: Download GeoIP Database
+        continue-on-error: true
         run: |
           mkdir -p assets
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
+          curl -fLg "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
           tar -xzf GeoLite2-City.tar.gz --strip-components=1 -C assets
 
+      # ─── Docker build & scan ────────────────────────────────────────────────
+      # Bygger Docker-imagen lokalt utan att pusha. --pull och --no-cache
+      # säkerställer att senaste basimage används och att ingen gammal cache
+      # döljer eventuella problem i bygget.
       - name: Build Docker image (no push)
         run: |
           docker build --pull --no-cache -f docker/Dockerfile -t sentinel-upload-api:ci .
 
+      # Skannar den byggda Docker-imagen med Trivy efter kända CVE:er med
+      # severity HIGH eller CRITICAL i OS-paket och applikationsberoenden.
+      # exit-code 1 gör att pipeline misslyckas om sårbarheter hittas.
       - name: Trivy scan (HIGH/CRITICAL)
         run: |
           docker run --rm \
@@ -69,6 +177,10 @@ jobs:
             aquasec/trivy:latest \
             image --exit-code 1 --severity HIGH,CRITICAL sentinel-upload-api:ci
 
+      # ─── SBOM ───────────────────────────────────────────────────────────────
+      # Genererar en Software Bill of Materials (SBOM) i SPDX-JSON-format med
+      # Syft. SBOM:en listar alla paket och beroenden i imagen och används för
+      # supply chain-transparens, licensgranskning och NIS2-compliance-spårning.
       - name: Generate SBOM (Syft)
         run: |
           docker run --rm \
@@ -83,9 +195,68 @@ jobs:
           name: sbom-spdx
           path: sbom.spdx.json
 
+  # ───── INTEGRATION TESTS ──────────────────────────────────────────────────────
+  # Kör integrationstester mot en riktig MongoDB-instans som startas som
+  # service-container i GitHub Actions. Testerna verifierar att data faktiskt
+  # sparas, hämtas och dedupliceras korrekt i databasen – till skillnad från
+  # enhetstesterna som mockar bort MongoDB helt.
+  # Körs parallellt med matrix-tests men kräver att test-and-build passerat.
+
+  integration-tests:
+    name: Integration tests (MongoDB)
+    runs-on: ubuntu-latest
+    needs: [test-and-build]
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      MONGODB_TEST_URI: mongodb://localhost:27017
+      UPLOAD_RATE_LIMIT_PER_MINUTE: "120"
+      UPLOAD_RATE_LIMIT_WINDOW_SECONDS: "60"
+
+    # MongoDB 7 startas som service-container och är tillgänglig på
+    # localhost:27017 under hela jobbet. Health-check säkerställer att
+    # databasen är redo innan testerna körs.
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt -r app/requirements-dev.txt
+
+      # Kör enbart tester märkta med @pytest.mark.integration.
+      # -v ger detaljerad output per test, --tb=short visar kompakt
+      # traceback vid fel utan att översvämma loggen.
+      - name: Run integration tests
+        run: |
+          pytest -m integration -v --tb=short
+
+  # ───── MATRIX ─────────────────────────────────────────────────────────────────
+  # Kör testsviten parallellt mot Python 3.11 och 3.12 för att säkerställa
+  # att koden fungerar korrekt på samtliga Python-versioner som stöds.
+  # fail-fast: false gör att båda versionerna alltid körs klart oavsett
+  # om en av dem misslyckas, vilket ger fullständig felrapport i ett svep.
+
   matrix-tests:
     name: Matrix tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
@@ -111,17 +282,23 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q
+          pytest -q --cov=app --cov-report=xml --cov-fail-under=80
+
+  # ─────── GHCR ─────────────────────────────────────────────────────────────────
+  # Körs bara vid push till main eller develop – aldrig på pull requests.
+  # Kräver att test-and-build, matrix-tests OCH integration-tests passerat
+  # utan fel innan imagen byggs och pushas till GHCR.
 
   ghcr-push:
     name: Build, push & sign (GHCR)
     runs-on: ubuntu-latest
-    needs: [test-and-build, matrix-tests]
+    needs: [test-and-build, matrix-tests, integration-tests]
+
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     permissions:
       contents: read
-      packages: write       # Push to ghcr.io
-      id-token: write       # Cosign keyless signing via GitHub OIDC
+      packages: write       # Tillåter push till ghcr.io
+      id-token: write       # Krävs för Cosign keyless signing via GitHub OIDC
 
     steps:
       - name: Checkout
@@ -134,6 +311,9 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Sätter image-taggar baserat på vilken branch som pushas.
+      # main → :main + :<git-sha>  |  develop → :develop + :<git-sha>
+      # SHA-taggen möjliggör exakt reproducerbarhet och rollback till specifik commit.
       - name: Determine image tags
         id: tags
         run: |
@@ -156,11 +336,15 @@ jobs:
           fi
 
       - name: Download GeoIP Database
+        continue-on-error: true
         run: |
           mkdir -p assets
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
+          curl -fLg "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
           tar -xzf GeoLite2-City.tar.gz --strip-components=1 -C assets
 
+      # Bygger och pushar imagen till GHCR med de taggar som sattes ovan.
+      # provenance: false används eftersom Cosign hanterar signeringen separat
+      # och undviker krav på attestations: write-behörighet.
       - name: Build and push image
         id: build-push
         uses: docker/build-push-action@v6
@@ -169,17 +353,23 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: ${{ steps.tags.outputs.value }}
-          provenance: false   # Cosign hanterar signing; undviker krav på attestations: write
+          provenance: false
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
+      # Signerar image-digestet kryptografiskt med Cosign i keyless-läge via
+      # GitHub OIDC. Signaturen lagras i Sigstore Rekor transparency log och
+      # kräver ingen manuell nyckelhantering. Möjliggör verifierbar supply chain.
       - name: Sign image digest (keyless via GitHub OIDC)
         env:
           IMAGE: ${{ steps.tags.outputs.image }}
         run: |
           cosign sign --yes "${IMAGE}@${{ steps.build-push.outputs.digest }}"
 
+      # Verifierar att signaturen är giltig och härstammar från rätt workflow
+      # i detta repository via GitHub Actions OIDC-utfärdaren. Bekräftar att
+      # imagen inte manipulerats efter signering.
       - name: Verify Cosign signature
         env:
           IMAGE: ${{ steps.tags.outputs.image }}

@@ -8,3 +8,4 @@ apscheduler
 geoip2
 prometheus-client>=0.21.0
 prometheus-fastapi-instrumentator>=7.0.0
+python-json-logger>=3.2.0
