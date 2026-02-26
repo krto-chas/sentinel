@@ -18,6 +18,8 @@ spec:
         app.kubernetes.io/part-of: sentinel-platform
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: runtime/default
+        checkov.io/skip1: "CKV_K8S_43=Image digest pinning handled via CI/CD pipeline tag promotion"
+        checkov.io/skip2: "CKV_K8S_35=Secrets loaded via envFrom; no plaintext values in manifests"
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -29,12 +31,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          # checkov:skip=CKV_K8S_43: digest pinning handled via CI/CD pipeline tag promotion.
           image: ghcr.io/jonitsx/sentinel-upload-api:main
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
-          # checkov:skip=CKV_K8S_35: secrets loaded via envFrom for operational simplicity;
           # no plaintext values in manifests — all values come from Kubernetes Secret.
           envFrom:
             - configMapRef:
