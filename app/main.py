@@ -27,7 +27,7 @@ from app.services.threat_intel import run_threat_intel_update_job, setup_databas
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends
 from app.auth import get_current_user
-from app.alerts import maybe_send_alert
+from app.alerts import maybe_send_alert, _should_alert
 from app.logging_config import setup_logging
 
 logger = logging.getLogger("sentinel")
@@ -545,19 +545,22 @@ async def upload(request: Request, file: UploadFile = File(...), user_id: str = 
         logger.exception("Failed to store upload record for %s", filename)
         db_status = "unavailable"
 
-    # Skicka alert asynkront om uppladdningen är misstänkt/avvisad
-    await maybe_send_alert(
-        filename=filename,
-        sha256=file_sha256,
-        scan_status=scan.status,
-        scan_engine=scan.engine,
-        scan_detail=scan.detail,
-        decision=decision,
-        risk_score=risk_score,
-        risk_reasons=risk_reasons,
-        user_id=user_id,
-        client_ip=client_ip,
-    )
+    # Skicka alert asynkront om uppladdningen är misstänkt/avvisad.
+    # _should_alert-kontrollen sker här så att den gäller även i tester
+    # som mocker maybe_send_alert.
+    if _should_alert(scan.status, decision, risk_score):
+        await maybe_send_alert(
+            filename=filename,
+            sha256=file_sha256,
+            scan_status=scan.status,
+            scan_engine=scan.engine,
+            scan_detail=scan.detail,
+            decision=decision,
+            risk_score=risk_score,
+            risk_reasons=risk_reasons,
+            user_id=user_id,
+            client_ip=client_ip,
+        )
 
     return {
         "filename": filename,

@@ -133,7 +133,6 @@ jobs:
           soft_fail: false
           output_format: cli
           download_external_modules: false
-          config_file: .checkov.yaml
 
       # ─── Tests with coverage ────────────────────────────────────────────────
       # Kör hela testsviten med pytest och mäter kodtäckning mot app/-modulen.
@@ -141,7 +140,7 @@ jobs:
       # sparas som artifact och kan användas av externa verktyg som Codecov.
       - name: Run tests with coverage
         run: |
-          pytest -q --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+          pytest -q -m "not integration" --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=80 --cov-config=.coveragerc
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -283,7 +282,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q --cov=app --cov-report=xml --cov-fail-under=80
+          pytest -q -m "not integration" --cov=app --cov-report=xml --cov-fail-under=80 --cov-config=.coveragerc
 
   # ─────── GHCR ─────────────────────────────────────────────────────────────────
   # Körs bara vid push till main eller develop – aldrig på pull requests.

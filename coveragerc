@@ -1,0 +1,10 @@
+[run]
+source = app
+omit =
+    # threat_intel.py är en MongoDB-service med externa beroenden.
+    # Dess tester körs enbart i integration-tests-jobbet med riktig MongoDB.
+    app/services/threat_intel.py
+
+[report]
+fail_under = 80
+show_missing = true
