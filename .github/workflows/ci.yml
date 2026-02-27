@@ -154,9 +154,15 @@ jobs:
       # MAXMIND_LICENSE_KEY saknas i repo-secrets (t.ex. på forks eller PRs).
       - name: Download GeoIP Database
         continue-on-error: true
+        env:
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
         run: |
+          if [ -z "${MAXMIND_LICENSE_KEY}" ]; then
+            echo "MAXMIND_LICENSE_KEY not configured – skipping GeoIP download"
+            exit 0
+          fi
           mkdir -p assets
-          curl -fLg "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
+          curl -fLg "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" -o GeoLite2-City.tar.gz
           tar -xzf GeoLite2-City.tar.gz --strip-components=1 -C assets
 
       # ─── Docker build & scan ────────────────────────────────────────────────
@@ -170,12 +176,14 @@ jobs:
       # Skannar den byggda Docker-imagen med Trivy efter kända CVE:er med
       # severity HIGH eller CRITICAL i OS-paket och applikationsberoenden.
       # exit-code 1 gör att pipeline misslyckas om sårbarheter hittas.
+      # .trivyignore innehåller CVE:er utan tillgänglig fix i Debian 12 med motivering.
       - name: Trivy scan (HIGH/CRITICAL)
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}/.trivyignore:/.trivyignore \
             aquasec/trivy:latest \
-            image --exit-code 1 --severity HIGH,CRITICAL sentinel-upload-api:ci
+            image --exit-code 1 --severity HIGH,CRITICAL --ignorefile /.trivyignore sentinel-upload-api:ci
 
       # ─── SBOM ───────────────────────────────────────────────────────────────
       # Genererar en Software Bill of Materials (SBOM) i SPDX-JSON-format med
@@ -337,9 +345,15 @@ jobs:
 
       - name: Download GeoIP Database
         continue-on-error: true
+        env:
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
         run: |
+          if [ -z "${MAXMIND_LICENSE_KEY}" ]; then
+            echo "MAXMIND_LICENSE_KEY not configured – skipping GeoIP download"
+            exit 0
+          fi
           mkdir -p assets
-          curl -fLg "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" -o GeoLite2-City.tar.gz
+          curl -fLg "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" -o GeoLite2-City.tar.gz
           tar -xzf GeoLite2-City.tar.gz --strip-components=1 -C assets
 
       # Bygger och pushar imagen till GHCR med de taggar som sattes ovan.
