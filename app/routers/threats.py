@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Query
 from typing import List, Dict, Any
 from pymongo import DESCENDING
@@ -17,5 +18,8 @@ async def get_latest_threats(limit: int = Query(100, ge=1, le=1000)):
     """
     Returns the most recent threat events with geolocation data.
     """
-    events_cursor = threat_events_collection.find({}, {"_id": 0}).sort("timestamp", DESCENDING).limit(limit)
-    return list(events_cursor)
+    def _fetch() -> List[Dict[str, Any]]:
+        cursor = threat_events_collection.find({}, {"_id": 0}).sort("timestamp", DESCENDING).limit(limit)
+        return list(cursor)
+
+    return await asyncio.to_thread(_fetch)

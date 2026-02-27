@@ -51,15 +51,6 @@ def setup_logging(level: str | None = None) -> None:
     """
     log_level = (level or os.getenv("LOG_LEVEL", "INFO") or "INFO").upper()
 
-    fmt = _SentinelJsonFormatter(
-        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
-        rename_fields={"asctime": "timestamp"},
-    )
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(fmt)
-
     logging.config.dictConfig(
         {
             "version": 1,

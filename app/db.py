@@ -10,8 +10,9 @@ def _mongo_uri() -> str:
     return os.getenv("MONGODB_URI", "mongodb://localhost:27017/sentinel_upload")
 
 
+@lru_cache
 def get_mongo_client() -> AsyncIOMotorClient:
-    # Lazy client creation; connect on first use.
+    # Singleton – Motor manages its own connection pool internally.
     return AsyncIOMotorClient(_mongo_uri())
 
 

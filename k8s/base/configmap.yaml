@@ -21,7 +21,12 @@ data:
   CISA_KEV_CACHE_TTL_SECONDS: "300"
   CISA_KEV_TIMEOUT_SECONDS: "8"
   CISA_KEV_USER_AGENT: "SentinelUploadAPI/1.0 (+https://sentinel-upload.secion.se)"
+  # AUTH_MODE: "off" innebär att uppladdning är öppen utan autentisering.
+  # Sätt till "apikey" och lägg till SENTINEL_API_KEYS i sentinel-app-secrets
+  # för att kräva autentisering i produktion.
   AUTH_MODE: "off"
+  # Databas för threat-intel-händelser (måste matcha MONGODB_URI-sökvägen i secret).
+  MONGO_DB_NAME: "sentinel_upload"
   FEODO_TRACKER_URL: "https://feodotracker.abuse.ch/downloads/ipblocklist.json"
   URLHAUS_RECENT_URL: "https://urlhaus.abuse.ch/downloads/json_recent/"
   URLHAUS_MAX_ITEMS: "1000"

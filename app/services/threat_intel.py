@@ -1,3 +1,4 @@
+import logging
 import os
 import requests
 import geoip2.database
@@ -10,9 +11,12 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
+logger = logging.getLogger("sentinel.threat_intel")
+
 # --- Konfiguration ---
+# Använder samma MONGODB_URI som huvudappen för konsekvent konfiguration.
 MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGO_DB_NAME = os.getenv("MONGODB_DB_NAME", "sentinel")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "sentinel_upload")
 FEODO_TRACKER_URL = os.getenv("FEODO_TRACKER_URL", "https://feodotracker.abuse.ch/downloads/ipblocklist.json")
 URLHAUS_RECENT_URL = os.getenv("URLHAUS_RECENT_URL", "https://urlhaus.abuse.ch/downloads/json_recent/")
 THREATFOX_API_URL = os.getenv("THREATFOX_API_URL", "https://threatfox-api.abuse.ch/api/v1/")
@@ -64,9 +68,8 @@ threat_events_collection = db["threat_events"]
 def get_geolocation(ip_address: str) -> Optional[Dict]:
     """Translates an IP address to geolocation data (lat/lon)."""
     if not os.path.exists(GEOIP_DB_PATH):
-        # Print only once per batch or handle logging better to avoid spam, but for now:
         return None
-        
+
     try:
         with geoip2.database.Reader(GEOIP_DB_PATH) as reader:
             response = reader.city(ip_address)
@@ -79,7 +82,7 @@ def get_geolocation(ip_address: str) -> Optional[Dict]:
     except (geoip2.errors.AddressNotFoundError, ValueError):
         return None
     except Exception as e:
-        print(f"Error during GeoIP lookup for {ip_address}: {e}")
+        logger.warning("GeoIP lookup failed for %s: %s", ip_address, e)
         return None
 
 
@@ -136,13 +139,13 @@ def _make_event(
 
 def fetch_and_normalize_feodo_iocs() -> List[Dict]:
     """Fetches Feodo Tracker data and normalizes it."""
-    print("Fetching threat intelligence from Feodo Tracker...")
+    logger.info("Fetching threat intelligence from Feodo Tracker...")
     try:
         response = requests.get(FEODO_TRACKER_URL, headers={"User-Agent": "SentinelUploadAPI/1.0"}, timeout=10)
         response.raise_for_status()
         iocs = response.json()
     except Exception as e:
-        print(f"Failed to fetch Feodo data: {e}")
+        logger.error("Failed to fetch Feodo data: %s", e)
         return []
 
     normalized_events = []
@@ -203,14 +206,14 @@ def fetch_and_normalize_feodo_iocs() -> List[Dict]:
             },
         )
         normalized_events.append(event)
-    
-    print(f"Normalized {len(normalized_events)} events from Feodo Tracker using DB at {GEOIP_DB_PATH}.")
+
+    logger.info("Normalized %d events from Feodo Tracker (geoip_db=%s)", len(normalized_events), GEOIP_DB_PATH)
     return normalized_events
 
 
 def fetch_and_normalize_urlhaus_iocs() -> List[Dict]:
     """Fetches URLhaus recent feed and normalizes entries with resolvable host geodata."""
-    print("Fetching threat intelligence from URLhaus...")
+    logger.info("Fetching threat intelligence from URLhaus...")
     try:
         response = requests.get(URLHAUS_RECENT_URL, headers={"User-Agent": "SentinelUploadAPI/1.0"}, timeout=12)
         response.raise_for_status()
@@ -236,13 +239,13 @@ def fetch_and_normalize_urlhaus_iocs() -> List[Dict]:
                 if id_keyed:
                     rows = id_keyed
                 else:
-                    print(f"URLhaus feed returned unexpected dict shape: keys={list(body.keys())[:8]}")
+                    logger.warning("URLhaus feed returned unexpected dict shape: keys=%s", list(body.keys())[:8])
                     return []
         else:
-            print(f"URLhaus feed returned unsupported shape: {type(body).__name__}")
+            logger.warning("URLhaus feed returned unsupported shape: %s", type(body).__name__)
             return []
     except Exception as e:
-        print(f"Failed to fetch URLhaus data: {e}")
+        logger.error("Failed to fetch URLhaus data: %s", e)
         return []
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=THREAT_LOOKBACK_DAYS)
@@ -295,13 +298,13 @@ def fetch_and_normalize_urlhaus_iocs() -> List[Dict]:
         )
         normalized_events.append(event)
 
-    print(f"Normalized {len(normalized_events)} events from URLhaus.")
+    logger.info("Normalized %d events from URLhaus", len(normalized_events))
     return normalized_events
 
 
 def fetch_and_normalize_threatfox_iocs() -> List[Dict]:
     """Fetches ThreatFox IOC feed and normalizes rows with geolocation."""
-    print("Fetching threat intelligence from ThreatFox...")
+    logger.info("Fetching threat intelligence from ThreatFox...")
     headers = {"User-Agent": "SentinelUploadAPI/1.0", "Content-Type": "application/json"}
     if THREATFOX_API_KEY:
         headers["Auth-Key"] = THREATFOX_API_KEY
@@ -313,19 +316,19 @@ def fetch_and_normalize_threatfox_iocs() -> List[Dict]:
         response.raise_for_status()
         body = response.json()
         if not isinstance(body, dict):
-            print(f"ThreatFox feed returned unsupported shape: {type(body).__name__}")
+            logger.warning("ThreatFox feed returned unsupported shape: %s", type(body).__name__)
             return []
         status = body.get("query_status")
         if status not in {"ok", "no_result"}:
-            print(f"ThreatFox query status: {status}")
+            logger.warning("ThreatFox query status: %s", status)
         rows = body.get("data", [])
         if status == "no_result":
             return []
         if not isinstance(rows, list):
-            print(f"ThreatFox feed returned unexpected data shape: {type(rows).__name__}")
+            logger.warning("ThreatFox feed returned unexpected data shape: %s", type(rows).__name__)
             return []
     except Exception as e:
-        print(f"Failed to fetch ThreatFox data: {e}")
+        logger.error("Failed to fetch ThreatFox data: %s", e)
         return []
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=THREAT_LOOKBACK_DAYS)
@@ -387,7 +390,7 @@ def fetch_and_normalize_threatfox_iocs() -> List[Dict]:
         )
         normalized_events.append(event)
 
-    print(f"Normalized {len(normalized_events)} events from ThreatFox.")
+    logger.info("Normalized %d events from ThreatFox", len(normalized_events))
     return normalized_events
 
 def setup_database_indexes():
@@ -401,7 +404,7 @@ def setup_database_indexes():
         pass
     # Unique per IOC/source/day to allow temporal variation while avoiding spam duplicates.
     threat_events_collection.create_index([("event_fingerprint", ASCENDING)], unique=True)
-    print("Threat intelligence indexes setup complete.")
+    logger.info("Threat intelligence indexes setup complete")
 
 def save_events_to_db(events: List[Dict]):
     """Saves events to DB, ignoring duplicates."""
@@ -416,21 +419,21 @@ def save_events_to_db(events: List[Dict]):
     limited = filtered[:THREAT_INTEL_MAX_EVENTS_PER_RUN]
 
     if not limited:
-        print("No events matched current threat-intel policy filters.")
+        logger.info("No events matched current threat-intel policy filters")
         return
 
     operations = [InsertOne(event) for event in limited]
     try:
         result = threat_events_collection.bulk_write(operations, ordered=False)
-        print(f"Inserted {result.inserted_count} new threat events.")
+        logger.info("Inserted %d new threat events", result.inserted_count)
     except BulkWriteError as bwe:
-        print(f"Inserted {bwe.details['nInserted']} new events (duplicates skipped).")
+        logger.info("Inserted %d new events (duplicates skipped)", bwe.details["nInserted"])
     except Exception as e:
-        print(f"Database write error: {e}")
+        logger.error("Database write error: %s", e)
 
 def run_threat_intel_update_job():
     """Main job function."""
-    print("Running threat intelligence update job...")
+    logger.info("Running threat intelligence update job...")
     events: List[Dict] = []
     if "Feodo Tracker" in ALLOWED_THREAT_SOURCES:
         events.extend(fetch_and_normalize_feodo_iocs())

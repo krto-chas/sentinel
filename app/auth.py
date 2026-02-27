@@ -57,8 +57,11 @@ async def _resolve_firebase_user(
         import firebase_admin
         from firebase_admin import auth as fb_auth
 
-        # Initialisera Firebase-appen om den inte redan är initialiserad
-        if not firebase_admin._apps:
+        # Initialisera Firebase-appen om den inte redan är initialiserad.
+        # Använder get_app() (publik API) istället för det privata _apps-attributet.
+        try:
+            firebase_admin.get_app()
+        except ValueError:
             creds_file = os.getenv("FIREBASE_CREDENTIALS_FILE")
             creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
             if creds_file:

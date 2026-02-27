@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+import logging
 import os
 import socket
 import struct
 
+logger = logging.getLogger("sentinel.scanner")
 
 EICAR_MARKER = b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE"
 DEFAULT_TIMEOUT_SECONDS = 5.0
@@ -45,7 +47,9 @@ def _scan_clamav(content: bytes) -> ScanResult:
             sock.sendall(struct.pack(">I", 0))
             response = sock.recv(4096).decode("utf-8", errors="replace").strip()
     except Exception as exc:
-        return ScanResult(status="error", engine="clamav", detail=f"ClamAV unavailable: {exc}")
+        # Log full detail internally; keep API response free of infrastructure info.
+        logger.warning("ClamAV connection failed (host=%s port=%s): %s", host, port, exc)
+        return ScanResult(status="error", engine="clamav", detail="ClamAV unavailable")
 
     if "FOUND" in response:
         signature = response.split("FOUND")[0].split(":")[-1].strip()
@@ -78,6 +82,6 @@ def scan_bytes(filename: str, content: bytes) -> ScanResult:
     clamav = _scan_clamav(content)
     if clamav.status == "error":
         mock = _scan_mock(filename, content)
-        mock.detail = f"{mock.detail} (fallback: {clamav.detail})"
+        mock.detail = f"{mock.detail} (fallback: ClamAV unavailable)"
         return mock
     return clamav
