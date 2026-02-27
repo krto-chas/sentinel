@@ -24,9 +24,9 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000   # Matchar appuser uid i Dockerfile och docker-compose user: "1000:1000"
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: 10001   # uid > 10000 krävs av CKV_K8S_40; matchar Dockerfile och docker-compose
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:

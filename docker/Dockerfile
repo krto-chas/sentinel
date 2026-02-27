@@ -3,7 +3,7 @@
 # =============================================================================
 # Säkerhetsåtgärder:
 #   - Pinnad bas-image med specifik version (inte bara "slim")
-#   - Non-root appuser (uid 1000)
+#   - Non-root appuser (uid/gid 10001 > 10000 – uppfyller CKV_K8S_40)
 #   - Bara produktionsberoenden installeras (requirements.txt, ej requirements-dev.txt)
 #   - Testfiler och utvecklingsverktyg kopieras INTE in i imagen
 #   - Minimal filsystemsyta — bara det som behövs för runtime
@@ -30,9 +30,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Skapa non-root user och grupp
-# uid/gid 1000 matchar docker-compose user: "1000:1000"
-RUN groupadd --gid 1000 appuser && \
-    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+# uid/gid 10001 matchar K8s runAsUser/runAsGroup och docker-compose user: "10001:10001"
+# Värdet > 10000 uppfyller Checkov CKV_K8S_40 (avoid host UID conflict).
+RUN groupadd --gid 10001 appuser && \
+    useradd --uid 10001 --gid appuser --shell /bin/bash --create-home appuser
 
 # Skapa workdir och sätt äganderätt
 WORKDIR /app
